@@ -1,0 +1,100 @@
+---
+import type { WishlistItem as Item } from "../data/items";
+const { item, enablePayPal = false } = Astro.props as { item: Item; enablePayPal?: boolean };
+const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
+const buttonId = `paypal-btn-${item.id}`;
+const inputId = `amount-input-${item.id}`;
+---
+
+<article class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm backdrop-blur">
+  <header class="mb-3">
+    <h3 class="text-lg font-semibold">{item.name}</h3>
+    <p class="mt-1 text-sm text-slate-300">{item.description}</p>
+  </header>
+
+  <div class="mt-3">
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-slate-300">Meta: {item.goal.toFixed(0)} €</span>
+      <span class="text-slate-300">Recaudado: {item.raised.toFixed(0)} €</span>
+    </div>
+    <div class="mt-2 h-2 w-full overflow-hidden rounded bg-slate-700/60">
+      <div class="h-full bg-emerald-500" style={{ width: `${progress}%` }} />
+    </div>
+    <p class="mt-1 text-xs text-slate-400">{progress}%</p>
+  </div>
+
+  <div class="mt-4 flex flex-col gap-3">
+    <label for={inputId} class="text-sm text-slate-200">Cantidad a donar (EUR)</label>
+    <input id={inputId} type="number" min="1" step="1" placeholder="Ej. 10" class="w-full rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+
+    <div id={buttonId} class="mt-1"></div>
+    {!enablePayPal && (
+      <p class="text-xs text-slate-400">(Demo) El botón de PayPal se muestra en una tarjeta para esta primera integración.</p>
+    )}
+  </div>
+</article>
+
+{enablePayPal && (
+  <script define:vars={{ inputId, buttonId, itemId: item.id }}>
+    const renderButtons = () => {
+      if (typeof paypal === 'undefined') {
+        console.error('PayPal SDK no cargado');
+        return;
+      }
+      const amountInput = document.getElementById(inputId);
+      const btnContainer = document.getElementById(buttonId);
+      if (!amountInput || !btnContainer) {
+        console.error('Elementos no encontrados', { inputId, buttonId });
+        return;
+      }
+
+      paypal.Buttons({
+        style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
+        createOrder: (data, actions) => {
+          const raw = amountInput.value;
+          const value = Math.max(1, Math.floor(Number(raw) || 0));
+          if (value < 1) {
+            alert('Por favor, introduce una cantidad válida (mínimo 1€)');
+            return Promise.reject();
+          }
+          return actions.order.create({
+            intent: 'CAPTURE',
+            purchase_units: [
+              {
+                amount: { currency_code: 'EUR', value: String(value) },
+                custom_id: itemId
+              }
+            ]
+          });
+        },
+        onApprove: async (data) => {
+          try {
+            const r = await fetch('/api/paypal/capture-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderID: data.orderID }),
+            });
+            const json = await r.json();
+            if (r.ok) {
+              alert(`¡Gracias! Donación capturada: €${json.amount} para ${json.itemId}`);
+            } else {
+              alert(`Error al capturar el pago: ${json.error || 'Desconocido'}`);
+            }
+          } catch (e) {
+            alert('Error de red al capturar el pago');
+          }
+        },
+        onError: (err) => {
+          console.error('PayPal Buttons error', err);
+          alert('Error con PayPal');
+        }
+      }).render(`#${buttonId}`);
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderButtons);
+    } else {
+      renderButtons();
+    }
+  </script>
+)}
