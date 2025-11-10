@@ -327,46 +327,52 @@ const buttonId = `paypal-button-${itemId}`;
         label: 'pay',
         height: 48
       },
-      fundingSource: paypal.FUNDING.CARD
-    }).render(`#${buttonId}-card`).then(() => {
-      // Forzar altura en movil del contenedor de PayPal después de renderizar
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
-      if (isMobile) {
-        setTimeout(() => {
-          const cardContainer = document.getElementById(`${buttonId}-card`);
-          if (cardContainer) {
-            // Buscar el div con clase paypal-buttons que PayPal crea
-            const paypalButtonsDiv = cardContainer.querySelector('.paypal-buttons');
-          if (paypalButtonsDiv) {
-            // Forzar altura mínima de 750px en móvil
-              let minHeight = 0;
-              if (window.innerWidth < 400) {
-                minHeight = 870;
-              } else if (window.innerWidth >= 400 && window.innerWidth < 500) {
-                minHeight = 820;
-              } else {
-                minHeight = 770;
-              }
-              paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
-              paypalButtonsDiv.style.setProperty('min-height', `${minHeight}px`, 'important');
-              
-              // Observar cambios para mantener la altura
-              const observer = new MutationObserver(() => {
-                const currentHeight = parseInt(paypalButtonsDiv.style.height) || 0;
-                if (currentHeight < minHeight) {
-                  paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
+      fundingSource: paypal.FUNDING.CARD,
+      onClick: (data, actions) => {
+        // Llamar al onClick del buttonConfig primero
+        const result = buttonConfig.onClick(data, actions);
+        
+        // Si el click es válido, ajustar altura en móvil
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
+        if (isMobile) {
+          setTimeout(() => {
+            const cardContainer = document.getElementById(`${buttonId}-card`);
+            if (cardContainer) {
+              const paypalButtonsDiv = cardContainer.querySelector('.paypal-buttons');
+              if (paypalButtonsDiv) {
+                // Calcular altura según ancho de pantalla
+                let minHeight = 0;
+                if (window.innerWidth < 400) {
+                  minHeight = 870;
+                } else if (window.innerWidth >= 400 && window.innerWidth < 500) {
+                  minHeight = 820;
+                } else {
+                  minHeight = 770;
                 }
-              });
-              
-              observer.observe(paypalButtonsDiv, {
-                attributes: true,
-                attributeFilter: ['style']
-              });
+                
+                paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
+                paypalButtonsDiv.style.setProperty('min-height', `${minHeight}px`, 'important');
+                
+                // Observar cambios para mantener la altura
+                const observer = new MutationObserver(() => {
+                  const currentHeight = parseInt(paypalButtonsDiv.style.height) || 0;
+                  if (currentHeight < minHeight) {
+                    paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
+                  }
+                });
+                
+                observer.observe(paypalButtonsDiv, {
+                  attributes: true,
+                  attributeFilter: ['style']
+                });
+              }
             }
-          }
-        }, 300);
+          }, 500);
+        }
+        
+        return result;
       }
-    });
+    }).render(`#${buttonId}-card`);
   };
 
   if (document.readyState === 'loading') {
