@@ -1,7 +1,5 @@
 # Oratory Wish List - Proyecto de Recaudación
 
-![Oratorio](https://via.placeholder.com/800x200.png?text=Imagen+del+Oratorio)
-
 ## 🌟 Descripción del Proyecto
 
 Esta es una aplicación web de página única creada para gestionar una "lista de deseos" y recaudar fondos para el mantenimiento y la mejora de un oratorio. Permite a los visitantes ver los artículos que necesitan financiación (cálices, patenas, ornamentos, etc.), visualizar el progreso de la recaudación para cada uno y realizar donaciones de forma segura a través de PayPal.
@@ -33,8 +31,8 @@ Sigue estos pasos para levantar el proyecto en tu máquina local.
 
 **2. Clonar el Repositorio:**
    ```bash
-   git clone [https://github.com/tu-usuario/nombre-del-repo.git](https://github.com/tu-usuario/nombre-del-repo.git)
-   cd nombre-del-repo
+   git clone https://github.com/tu-usuario/wish-list-reco.git
+   cd wish-list-reco
    ```
 
 **3. Instalar Dependencias:**
