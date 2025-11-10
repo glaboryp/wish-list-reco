@@ -1,7 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0b1220;
+  --primary: #007986;
+  --primary-hover: #005764;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -10,5 +15,22 @@ body {
 }
 
 body {
-  background: radial-gradient(60% 60% at 50% 0%, #0f172a 0%, #0b1220 100%);
+  background: #f9fafb;
+  min-height: 100vh;
+}
+
+/* Animación para el toast */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
 }

@@ -1,0 +1,198 @@
+---
+import "../../styles/global.css";
+import sql from "../../lib/db";
+import type { ItemWithImage, DBItemImage } from "../../types/database";
+import DonationForm from "../../components/DonationForm.astro";
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/');
+}
+
+const clientId = import.meta.env.PUBLIC_PAYPAL_CLIENT_ID;
+
+// Obtener el item con todas sus imágenes
+const itemResult = await sql`
+  SELECT 
+    items.id,
+    items.name,
+    items.description,
+    items.goal_amount,
+    items.raised_amount,
+    items.status,
+    items.sort_order,
+    items.created_at,
+    items.updated_at
+  FROM items
+  WHERE items.id = ${id}
+  LIMIT 1;
+`;
+
+if (itemResult.length === 0) {
+  return Astro.redirect('/');
+}
+
+const dbItem = itemResult[0] as ItemWithImage;
+
+// Obtener todas las imágenes del item
+const imagesResult = await sql`
+  SELECT 
+    id,
+    item_id,
+    image_url,
+    alt_text,
+    sort_order
+  FROM item_images
+  WHERE item_id = ${id}
+  ORDER BY sort_order ASC;
+`;
+
+const images = imagesResult as DBItemImage[];
+
+// Transformar datos
+const item = {
+  id: dbItem.id,
+  name: dbItem.name,
+  description: dbItem.description || '',
+  goal: parseFloat(dbItem.goal_amount),
+  raised: parseFloat(dbItem.raised_amount),
+  status: dbItem.status,
+  createdAt: dbItem.created_at,
+  updatedAt: dbItem.updated_at,
+};
+
+const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
+const isFunded = item.status === 'funded';
+const remaining = Math.max(0, item.goal - item.raised);
+const maxDonation = Math.ceil(remaining);
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{item.name} - Lista de Deseos del Oratorio</title>
+    {clientId && !isFunded && (
+      <script src={`https://www.paypal.com/sdk/js?client-id=${clientId}&currency=EUR&intent=capture&disable-funding=paylater&components=buttons`} data-sdk-integration-source="astro" data-namespace="paypal"></script>
+    )}
+  </head>
+  <body class="antialiased">
+    <main class="mx-auto max-w-6xl px-4 py-10">
+      <!-- Botón de volver -->
+      <a href="/#wishlist" class="inline-flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Volver a la lista
+      </a>
+
+      <div class="grid lg:grid-cols-2 gap-8">
+        <!-- Galería de imágenes -->
+        <div class="space-y-4">
+          {images.length > 0 ? (
+            <>
+              <!-- Imagen principal -->
+              <div class="aspect-video rounded-xl overflow-hidden bg-gray-100 shadow-lg">
+                <img 
+                  src={images[0].image_url} 
+                  alt={images[0].alt_text || item.name}
+                  class="w-full h-full object-cover"
+                  id="main-image"
+                />
+              </div>
+              
+              <!-- Miniaturas -->
+              {images.length > 1 && (
+                <div class="grid grid-cols-4 gap-3">
+                  {images.map((img, idx) => (
+                    <button
+                      type="button"
+                      class="aspect-square rounded-lg overflow-hidden bg-gray-100 border-2 border-transparent hover:border-red-500 transition-colors cursor-pointer"
+                      onclick={`document.getElementById('main-image').src='${img.image_url}'`}
+                    >
+                      <img 
+                        src={img.image_url} 
+                        alt={img.alt_text || `${item.name} - Imagen ${idx + 1}`}
+                        class="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div class="aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+              <p class="text-gray-400">Sin imágenes disponibles</p>
+            </div>
+          )}
+        </div>
+
+        <!-- Información y donación -->
+        <div class="space-y-6">
+          <!-- Badge de estado -->
+          {isFunded && (
+            <div class="inline-flex items-center bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-semibold">
+              <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              ✓ Completado
+            </div>
+          )}
+
+          <!-- Título y descripción -->
+          <div>
+            <h1 class="text-4xl font-bold text-gray-900 mb-3">{item.name}</h1>
+            <p class="text-lg text-gray-600 leading-relaxed" style="white-space: pre-line;">{item.description}</p>
+          </div>
+
+          <!-- Progreso -->
+          <div class="bg-gray-50 rounded-xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-gray-600">Recaudado</p>
+                <p class="text-3xl font-bold text-gray-900">{item.raised.toFixed(0)} €</p>
+              </div>
+              <div class="text-right">
+                <p class="text-sm text-gray-600">Meta</p>
+                <p class="text-2xl font-semibold text-gray-700">{item.goal.toFixed(0)} €</p>
+              </div>
+            </div>
+            
+            <div>
+              <div class="flex items-center justify-between text-sm mb-2">
+                <span class="text-gray-600 font-medium">{progress}% completado</span>
+                {!isFunded && (
+                  <span class="text-gray-600">Faltan {remaining.toFixed(0)} €</span>
+                )}
+              </div>
+              <div class="h-3 w-full overflow-hidden rounded-full bg-gray-200">
+                <div 
+                  class={`h-full transition-all ${isFunded ? 'bg-green-500' : ''}`}
+                  style={isFunded ? { width: `${progress}%` } : { width: `${progress}%`, backgroundColor: 'var(--primary)' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Formulario de donación -->
+          {!isFunded ? (
+            <div class="bg-white rounded-xl border-2 border-gray-200 p-6 space-y-4">
+              <h2 class="text-xl font-bold text-gray-900">Contribuir a este artículo</h2>
+              <DonationForm itemId={item.id} itemName={item.name} maxDonation={maxDonation} isDetailPage={true} />
+            </div>
+          ) : (
+            <div class="bg-green-50 rounded-xl border-2 border-green-200 p-6 text-center">
+              <div class="text-green-600 text-5xl mb-3">🎉</div>
+              <h2 class="text-xl font-bold text-green-900 mb-2">¡Meta Alcanzada!</h2>
+              <p class="text-green-700">
+                Gracias a todos los que contribuyeron para hacer esto posible.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

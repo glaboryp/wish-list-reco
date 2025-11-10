@@ -1,16 +1,49 @@
 ---
 import "../styles/global.css";
 import WishlistItem from "../components/WishlistItem.astro";
-import { items } from "../data/items";
+import sql from "../lib/db";
+import type { ItemWithImage, WishlistItem as WishlistItemType } from "../types/database";
 
 const clientId = import.meta.env.PUBLIC_PAYPAL_CLIENT_ID;
 const paypalEnv = import.meta.env.PUBLIC_PAYPAL_ENVIRONMENT || "sandbox";
+
+// Obtener items activos y financiados de la base de datos con su imagen principal
+const dbItems = await sql`
+  SELECT 
+    items.id,
+    items.name,
+    items.description,
+    items.goal_amount,
+    items.raised_amount,
+    items.status,
+    items.sort_order,
+    items.created_at,
+    items.updated_at,
+    img.image_url,
+    img.alt_text
+  FROM items
+  LEFT JOIN item_images AS img ON items.id = img.item_id AND img.sort_order = 0
+  WHERE items.status IN ('active', 'funded')
+  ORDER BY items.status ASC, items.sort_order ASC;
+`;
+
+// Transformar los datos de la BD al formato esperado por el componente
+const items: WishlistItemType[] = (dbItems as ItemWithImage[]).map(item => ({
+  id: item.id,
+  name: item.name,
+  description: item.description || '',
+  goal: parseFloat(item.goal_amount),
+  raised: parseFloat(item.raised_amount),
+  imageUrl: item.image_url,
+  imageAlt: item.alt_text,
+  status: item.status,
+}));
 ---
 
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <title>Lista de Deseos del Oratorio</title>
@@ -18,16 +51,64 @@ const paypalEnv = import.meta.env.PUBLIC_PAYPAL_ENVIRONMENT || "sandbox";
       <script src={`https://www.paypal.com/sdk/js?client-id=${clientId}&currency=EUR&intent=capture&disable-funding=paylater&components=buttons`} data-sdk-integration-source="astro" data-namespace="paypal"></script>
     )}
   </head>
-  <body class="text-slate-100 antialiased">
-    <main class="mx-auto max-w-6xl px-4 py-10">
-      <section class="mb-10 text-center">
-        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Ayúdanos a Renovar el oratorio de Recoletos</h1>
-        <p class="mt-3 text-slate-300">Contribuye con la cantidad que desees a cualquiera de los artículos de esta lista de deseos.</p>
-      </section>
+  <body class="antialiased">
+    <!-- Hero Section -->
+    <section class="relative h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mx-4 mt-6 mb-12">
+      <!-- Background image with overlay -->
+      <div class="absolute inset-0 bg-gradient-to-b from-black/60 to-black/40">
+        <img 
+          src="/public/oratorio.webp" 
+          alt="Interior del oratorio" 
+          class="w-full h-full object-cover"
+        />
+      </div>
+      
+      <!-- Content -->
+      <div class="relative z-10 text-center px-4 max-w-3xl">
+        <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-12 drop-shadow-lg">
+          Ayúdanos a reparar los objetos litúrgicos del oratorio de Recoletos
+        </h1>
+        <a 
+          href="#wishlist" 
+          class="inline-block text-white font-semibold px-8 py-3 rounded-lg shadow-lg transition-colors"
+          style="background-color: var(--primary);"
+          onmouseover="this.style.backgroundColor='var(--primary-hover)'"
+          onmouseout="this.style.backgroundColor='var(--primary)'"
+        >
+          Ver la lista de deseos y contribuir
+        </a>
+      </div>
+    </section>
 
+    <!-- Explicación del proyecto -->
+    <section class="mx-auto max-w-4xl px-4 mb-16">
+      <div class="bg-white rounded-2xl shadow-lg p-8 md:p-12 border border-gray-100">
+        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+          Explicación del proyecto
+        </h2>
+        <div class="prose prose-lg max-w-none text-gray-700 leading-relaxed space-y-4">
+          <p>
+            Recoletos es una asociación juvenil para la formación humana y espiritual de universitarias.
+          </p>
+          <p>
+            Este 2026 Recoletos cumple 50 años y por el transcurso del tiempo se han deteriorado algunos de los objetos litúrgicos del oratorio.
+          </p>
+          <p>
+            Al ser la parte más importante de la asociación, queremos arreglarla entre todos.
+          </p>
+          <p class="font-medium" style="color: var(--primary);">
+            Como a quien cuida las cosas de Dios, Dios le cuida, os animamos a participar en este proyecto.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <main class="mx-auto max-w-6xl px-4 pb-16">
+      <h2 id="wishlist" class="text-3xl font-bold text-center text-gray-900 mb-10">Nuestra lista de deseos</h2>
+      
       <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item, idx) => (
-          <WishlistItem item={item} enablePayPal={idx === 0} />
+        {items.map((item) => (
+          <WishlistItem item={item} enablePayPal={true} />
         ))}
       </section>
     </main>

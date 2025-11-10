@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import sql from '../../../lib/db';
 
 const PAYPAL_ENV = (import.meta.env.PUBLIC_PAYPAL_ENVIRONMENT || 'sandbox').toLowerCase();
 const PAYPAL_API_BASE = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -62,12 +63,68 @@ export const POST: APIRoute = async ({ request }) => {
     const capture = payments?.captures?.[0];
     const amount = capture?.amount?.value;
     const currency = capture?.amount?.currency_code;
-    const customId = pu?.custom_id;
+    const itemId = capture?.custom_id; // El custom_id está en el capture, no en purchase_unit
 
-    console.log(`Capturado con éxito €${amount} ${currency} para el artículo ${customId}`);
+    if (!itemId || !amount) {
+      console.error('Faltan datos en la respuesta de PayPal', { itemId, amount });
+      return new Response(JSON.stringify({ error: 'Datos incompletos de PayPal' }), { status: 500 });
+    }
+
+    // Actualizar la base de datos
+    let updatedItem: any;
+    try {
+      // Actualizar raised_amount y cambiar status a 'funded' si se alcanza la meta
+      const result = await sql`
+        UPDATE items
+        SET 
+          raised_amount = raised_amount + ${amount},
+          status = CASE 
+            WHEN (raised_amount + ${amount}) >= goal_amount THEN 'funded'::item_status
+            ELSE status
+          END,
+          updated_at = NOW()
+        WHERE id = ${itemId}
+        RETURNING id, name, raised_amount, goal_amount, status
+      `;
+      
+      updatedItem = result[0];
+      const isFunded = updatedItem.status === 'funded';
+      
+      console.log(`✅ Capturado con éxito €${amount} ${currency} para el artículo ${itemId}`);
+      console.log(`   Base de datos actualizada correctamente`);
+      console.log(`   ${updatedItem.name}: €${updatedItem.raised_amount} / €${updatedItem.goal_amount}`);
+      
+      if (isFunded) {
+        console.log(`   🎉 ¡Meta alcanzada! Estado cambiado a 'funded'`);
+      }
+
+    } catch (dbError) {
+      console.error('❌ Error al actualizar la base de datos:', dbError);
+      // Aunque el pago fue exitoso, falló la actualización de BD
+      // Deberías tener un sistema de retry o notificación manual
+      return new Response(
+        JSON.stringify({ 
+          error: 'Pago capturado pero error al actualizar la base de datos',
+          paymentId: capture?.id,
+          itemId,
+          amount 
+        }), 
+        { status: 500 }
+      );
+    }
 
     return new Response(
-      JSON.stringify({ ok: true, amount, currency, itemId: customId, status }),
+      JSON.stringify({ 
+        ok: true, 
+        amount, 
+        currency, 
+        itemId, 
+        status,
+        isFunded: updatedItem.status === 'funded',
+        itemName: updatedItem.name,
+        raised: updatedItem.raised_amount,
+        goal: updatedItem.goal_amount
+      }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (e: any) {

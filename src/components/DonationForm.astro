@@ -1,0 +1,377 @@
+---
+interface Props {
+  itemId: string;
+  itemName: string;
+  maxDonation: number;
+  isDetailPage?: boolean;
+}
+
+const { itemId, itemName, maxDonation, isDetailPage = false } = Astro.props;
+
+// IDs únicos para este componente
+const inputId = `amount-${itemId}`;
+const buttonId = `paypal-button-${itemId}`;
+---
+
+<div class="flex flex-col gap-3" style="transform: none; will-change: auto;">
+  <div class="flex items-center justify-between" id={`${inputId}-label-container`}>
+    <label for={inputId} class="text-sm font-medium text-gray-900">Cantidad a donar (EUR)</label>
+    <span class="text-xs text-gray-500">Máx: {maxDonation} €</span>
+  </div>
+  <input 
+    id={inputId} 
+    type="number" 
+    name="amount"
+    min="1" 
+    max={maxDonation}
+    step="1" 
+    placeholder={`Ej. ${Math.min(10, maxDonation)}`}
+    class="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:outline-none"
+    style="--focus-color: var(--primary);"
+    onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent)';"
+    onblur="this.style.borderColor=''; this.style.boxShadow='';"
+  />
+  <p id={`${inputId}-help`} class="text-xs text-gray-500 -mt-1">
+    Faltan {maxDonation} € para completar este artículo
+  </p>
+  <p id={`${inputId}-error`} class="text-xs text-red-600 hidden -mt-1">
+    La cantidad no puede superar {maxDonation} €
+  </p>
+  <!-- Mensaje para móvil en lista -->
+  <div id={`${buttonId}-mobile-message`} class="hidden text-center py-4 rounded-lg border" style="background-color: color-mix(in srgb, var(--primary) 10%, white); border-color: color-mix(in srgb, var(--primary) 30%, white);">
+    <p class="text-sm font-medium mb-2" style="color: color-mix(in srgb, var(--primary) 90%, black);">💳 Donación disponible</p>
+    <p class="text-xs" style="color: color-mix(in srgb, var(--primary) 70%, black);">Haz click en la tarjeta para ver detalles y donar</p>
+  </div>
+  
+  <!-- Indicador de carga -->
+  <div id={`${buttonId}-loading`} class="hidden text-center py-3">
+    <div class="inline-flex items-center gap-2 text-sm font-medium" style="color: var(--primary);">
+      <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>Cargando formulario de pago...</span>
+    </div>
+  </div>
+  
+  <!-- Botones de PayPal -->
+  <div class="flex flex-col gap-2 -mt-1" id={`${buttonId}-buttons-container`}>
+    <div id={`${buttonId}-paypal`} class="touch-manipulation paypal-buttons-container"></div>
+    <div id={`${buttonId}-card`} class="touch-manipulation paypal-buttons-container"></div>
+  </div>
+</div>
+
+<style>
+  .paypal-buttons-container {
+    position: relative;
+    isolation: isolate;
+    overflow: visible !important;
+  }
+  
+  .paypal-buttons-container iframe {
+    position: relative !important;
+    display: block !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Forzar altura mínima en todos los iframes */
+  .paypal-buttons-container iframe[name],
+  .paypal-buttons-container iframe[id] {
+    min-height: 500px !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  
+  /* En móvil, asegurar altura suficiente para el formulario de tarjeta */
+  @media (max-width: 767px) {
+    .paypal-buttons-container iframe[name],
+    .paypal-buttons-container iframe[id] {
+      min-height: 700px !important;
+    }
+  }
+</style>
+
+<script define:vars={{ inputId, buttonId, itemId, itemName, maxDonation, isDetailPage }}>
+  // Función para mostrar toast
+  function showToast(message, type = 'error') {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50 animate-slide-in ${
+      type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.classList.add('opacity-0');
+      setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  }
+
+  const renderButtons = () => {
+    if (typeof paypal === 'undefined') {
+      console.error('PayPal SDK no cargado');
+      return;
+    }
+    const amountInput = document.getElementById(inputId);
+    const paypalContainer = document.getElementById(`${buttonId}-paypal`);
+    const cardContainer = document.getElementById(`${buttonId}-card`);
+    const helpText = document.getElementById(`${inputId}-help`);
+    const errorText = document.getElementById(`${inputId}-error`);
+    
+    if (!amountInput || !paypalContainer || !cardContainer) {
+      console.error('Elementos no encontrados');
+      return;
+    }
+
+    let buttonsEnabled = true;
+
+    function validateAmount() {
+      const value = parseFloat(amountInput.value) || 0;
+      const isValid = value >= 1 && value <= maxDonation;
+      
+      if (value > maxDonation) {
+        amountInput.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        amountInput.classList.remove('border-gray-300');
+        helpText.classList.add('hidden');
+        errorText.classList.remove('hidden');
+        buttonsEnabled = false;
+        paypalContainer.style.opacity = '0.5';
+        paypalContainer.style.pointerEvents = 'none';
+        cardContainer.style.opacity = '0.5';
+        cardContainer.style.pointerEvents = 'none';
+      } else {
+        amountInput.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+        amountInput.classList.add('border-gray-300');
+        helpText.classList.remove('hidden');
+        errorText.classList.add('hidden');
+        buttonsEnabled = true;
+        paypalContainer.style.opacity = '1';
+        paypalContainer.style.pointerEvents = 'auto';
+        cardContainer.style.opacity = '1';
+        cardContainer.style.pointerEvents = 'auto';
+      }
+      
+      return isValid;
+    }
+
+    // Escuchar cambios en el input
+    amountInput.addEventListener('input', validateAmount);
+    amountInput.addEventListener('change', validateAmount);
+
+    // Detectar si es móvil
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+    const showMobileMessage = isMobile && !isDetailPage; // En móvil (lista) mostrar mensaje, en detalles mostrar botones
+
+    // Si es móvil y NO estamos en página de detalles, mostrar mensaje
+    if (showMobileMessage) {
+      const mobileMessage = document.getElementById(`${buttonId}-mobile-message`);
+      const buttonsContainer = document.getElementById(`${buttonId}-buttons-container`);
+      const amountInput = document.getElementById(inputId);
+      const labelContainer = document.getElementById(`${inputId}-label-container`);
+      const helpText = document.getElementById(`${inputId}-help`);
+      
+      if (mobileMessage && buttonsContainer && amountInput) {
+        // Mostrar mensaje
+        mobileMessage.classList.remove('hidden');
+        
+        // Ocultar botones
+        buttonsContainer.style.display = 'none';
+        
+        // Ocultar input, label y texto de ayuda
+        amountInput.style.display = 'none';
+        if (labelContainer) labelContainer.style.display = 'none';
+        if (helpText) helpText.style.display = 'none';
+      }
+      
+      return; // No renderizar botones
+    }
+
+    // Variables para controlar el estado de carga
+    let isProcessing = false;
+    const loadingIndicator = document.getElementById(`${buttonId}-loading`);
+    const buttonsContainer = document.getElementById(`${buttonId}-buttons-container`);
+    
+    function showLoading() {
+      if (loadingIndicator && buttonsContainer) {
+        loadingIndicator.classList.remove('hidden');
+        buttonsContainer.style.opacity = '0.5';
+        buttonsContainer.style.pointerEvents = 'none';
+      }
+    }
+    
+    function hideLoading() {
+      if (loadingIndicator && buttonsContainer) {
+        loadingIndicator.classList.add('hidden');
+        buttonsContainer.style.opacity = '1';
+        buttonsContainer.style.pointerEvents = 'auto';
+      }
+    }
+
+    // Configuración común para ambos botones
+    const buttonConfig = {
+      onClick: (data, actions) => {
+        // Prevenir clicks múltiples
+        if (isProcessing) {
+          return actions.reject();
+        }
+        
+        // Validar cantidad antes de continuar
+        const amount = parseFloat(amountInput.value);
+        if (!amount || amount < 1 || amount > maxDonation) {
+          showToast('Por favor, introduce una cantidad válida', 'error');
+          return actions.reject();
+        }
+        
+        // Mostrar loading y deshabilitar botones
+        isProcessing = true;
+        showLoading();
+        
+        // Ocultar loading después de un tiempo si el formulario se abre correctamente
+        setTimeout(() => {
+          if (isProcessing) {
+            hideLoading();
+          }
+        }, 1500);
+        
+        return actions.resolve();
+      },
+      createOrder: (data, actions) => {
+        const raw = amountInput.value;
+        let value = Math.max(1, Math.floor(Number(raw) || 0));
+        
+        // Validar cantidad mínima
+        if (value < 1) {
+          showToast('Por favor, introduce una cantidad válida (mínimo 1€)', 'error');
+          return Promise.reject();
+        }
+        
+        // Validar cantidad máxima (no exceder lo que falta)
+        if (value > maxDonation) {
+          showToast(`La cantidad máxima que puedes donar es ${maxDonation}€`, 'error');
+          return Promise.reject();
+        }
+
+        return actions.order.create({
+          intent: 'CAPTURE',
+          purchase_units: [
+            {
+              amount: { currency_code: 'EUR', value: String(value) },
+              description: `Donación para: ${itemName}`,
+              custom_id: itemId,
+              reference_id: itemId
+            }
+          ],
+          application_context: {
+            shipping_preference: 'NO_SHIPPING',
+            user_action: 'PAY_NOW'
+          }
+        });
+      },
+      onCancel: (data) => {
+        // Usuario canceló el pago
+        hideLoading();
+        isProcessing = false;
+      },
+      onApprove: async (data, actions) => {
+        // Mantener el loading mientras se procesa el pago
+        try {
+          const r = await fetch('/api/paypal/capture-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderID: data.orderID }),
+          });
+          
+          const json = await r.json();
+          
+          if (r.ok) {
+            showToast('¡Pago completado con éxito! Gracias por tu contribución 🎉', 'success');
+            setTimeout(() => window.location.reload(), 2000);
+          } else {
+            hideLoading();
+            isProcessing = false;
+            showToast(json.error || 'Error al procesar el pago', 'error');
+          }
+        } catch (e) {
+          hideLoading();
+          isProcessing = false;
+          showToast('Error de red al capturar el pago', 'error');
+        }
+      },
+      onError: (err) => {
+        console.error('PayPal Buttons error', err);
+        hideLoading();
+        isProcessing = false;
+        showToast('Error al procesar con PayPal', 'error');
+      }
+    };
+    
+    // Renderizar botones separados (desktop o página de detalles)
+    paypal.Buttons({
+      ...buttonConfig,
+      style: { 
+        layout: 'horizontal',
+        color: 'black',
+        shape: 'rect',
+        label: 'paypal',
+        height: 48
+      },
+      fundingSource: paypal.FUNDING.PAYPAL
+    }).render(`#${buttonId}-paypal`);
+    
+    paypal.Buttons({
+      ...buttonConfig,
+      style: { 
+        layout: 'horizontal',
+        color: 'black',
+        shape: 'rect',
+        label: 'pay',
+        height: 48
+      },
+      fundingSource: paypal.FUNDING.CARD
+    }).render(`#${buttonId}-card`).then(() => {
+      // Forzar altura en movil del contenedor de PayPal después de renderizar
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
+      if (isMobile) {
+        setTimeout(() => {
+          const cardContainer = document.getElementById(`${buttonId}-card`);
+          if (cardContainer) {
+            // Buscar el div con clase paypal-buttons que PayPal crea
+            const paypalButtonsDiv = cardContainer.querySelector('.paypal-buttons');
+          if (paypalButtonsDiv) {
+            // Forzar altura mínima de 750px en móvil
+              let minHeight = 0;
+              if (window.innerWidth < 400) {
+                minHeight = 870;
+              } else if (window.innerWidth >= 400 && window.innerWidth < 500) {
+                minHeight = 820;
+              } else {
+                minHeight = 770;
+              }
+              paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
+              paypalButtonsDiv.style.setProperty('min-height', `${minHeight}px`, 'important');
+              
+              // Observar cambios para mantener la altura
+              const observer = new MutationObserver(() => {
+                const currentHeight = parseInt(paypalButtonsDiv.style.height) || 0;
+                if (currentHeight < minHeight) {
+                  paypalButtonsDiv.style.setProperty('height', `${minHeight}px`, 'important');
+                }
+              });
+              
+              observer.observe(paypalButtonsDiv, {
+                attributes: true,
+                attributeFilter: ['style']
+              });
+            }
+          }
+        }, 300);
+      }
+    });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderButtons);
+  } else {
+    renderButtons();
+  }
+</script>
