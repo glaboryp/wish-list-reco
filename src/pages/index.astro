@@ -3,6 +3,7 @@ import "../styles/global.css";
 import WishlistItem from "../components/WishlistItem.astro";
 import sql from "../lib/db";
 import type { ItemWithImage, WishlistItem as WishlistItemType } from "../types/database";
+import Analytics from '@vercel/analytics/astro';
 
 const clientId = import.meta.env.PUBLIC_PAYPAL_CLIENT_ID;
 const paypalEnv = import.meta.env.PUBLIC_PAYPAL_ENVIRONMENT || "sandbox";
@@ -112,5 +113,7 @@ const items: WishlistItemType[] = (dbItems as ItemWithImage[]).map(item => ({
         ))}
       </section>
     </main>
+
+    <Analytics />
   </body>
 </html>

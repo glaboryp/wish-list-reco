@@ -3,6 +3,7 @@ import "../../styles/global.css";
 import sql from "../../lib/db";
 import type { ItemWithImage, DBItemImage } from "../../types/database";
 import DonationForm from "../../components/DonationForm.astro";
+import Analytics from '@vercel/analytics/astro';
 
 const { id } = Astro.params;
 
@@ -194,5 +195,7 @@ const maxDonation = Math.ceil(remaining);
         </div>
       </div>
     </main>
+
+    <Analytics />
   </body>
 </html>
