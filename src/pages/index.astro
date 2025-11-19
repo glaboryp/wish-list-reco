@@ -4,6 +4,7 @@ import WishlistItem from "../components/WishlistItem.astro";
 import sql from "../lib/db";
 import type { ItemWithImage, WishlistItem as WishlistItemType } from "../types/database";
 import Analytics from '@vercel/analytics/astro';
+import  SpeedInsights  from "@vercel/speed-insights/astro"
 
 const clientId = import.meta.env.PUBLIC_PAYPAL_CLIENT_ID;
 const paypalEnv = import.meta.env.PUBLIC_PAYPAL_ENVIRONMENT || "sandbox";
@@ -115,5 +116,6 @@ const items: WishlistItemType[] = (dbItems as ItemWithImage[]).map(item => ({
     </main>
 
     <Analytics />
+    <SpeedInsights />
   </body>
 </html>
