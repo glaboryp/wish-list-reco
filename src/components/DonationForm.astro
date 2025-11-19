@@ -37,9 +37,24 @@ const buttonId = `paypal-button-${itemId}`;
   <p id={`${inputId}-error`} class="text-xs text-red-600 hidden -mt-1">
     La cantidad no puede superar {maxDonation} €
   </p>
+  <div class="flex items-start gap-2 mt-1">
+    <input
+      id={`${inputId}-cover-fees`}
+      type="checkbox"
+      class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    />
+    <label for={`${inputId}-cover-fees`} class="text-sm text-gray-700">
+      Cubrir gastos de gestión
+      <span id={`${inputId}-fees-label-extra`} class="text-sm text-gray-600"></span>
+    </label>
+  </div>
+  <p
+    id={`${inputId}-fees-summary`}
+    class="text-xs text-gray-600 mt-1 hidden"
+  ></p>
   <!-- Mensaje para móvil en lista -->
   <div id={`${buttonId}-mobile-message`} class="hidden text-center py-4 rounded-lg border" style="background-color: color-mix(in srgb, var(--primary) 10%, white); border-color: color-mix(in srgb, var(--primary) 30%, white);">
-    <p class="text-sm font-medium mb-2" style="color: color-mix(in srgb, var(--primary) 90%, black);">💳 Donación disponible</p>
+    <p class="text-sm font-medium mb-2" style="color: color-mix(in srgb, var(--primary) 90%, black);"> Donación disponible</p>
     <p class="text-xs" style="color: color-mix(in srgb, var(--primary) 70%, black);">Haz click en la tarjeta para ver detalles y donar</p>
   </div>
   
@@ -117,6 +132,9 @@ const buttonId = `paypal-button-${itemId}`;
     const cardContainer = document.getElementById(`${buttonId}-card`);
     const helpText = document.getElementById(`${inputId}-help`);
     const errorText = document.getElementById(`${inputId}-error`);
+    const coverFeesCheckbox = document.getElementById(`${inputId}-cover-fees`);
+    const feesLabelExtra = document.getElementById(`${inputId}-fees-label-extra`);
+    const feesSummary = document.getElementById(`${inputId}-fees-summary`);
     
     if (!amountInput || !paypalContainer || !cardContainer) {
       console.error('Elementos no encontrados');
@@ -124,6 +142,52 @@ const buttonId = `paypal-button-${itemId}`;
     }
 
     let buttonsEnabled = true;
+
+    const FEE_RATE = 0.012;
+    const FIXED_FEE = 0.35;
+
+    function calculateTotals(netoAmount) {
+      const neto = typeof netoAmount === 'number' ? netoAmount : (parseFloat(amountInput.value) || 0);
+      if (!neto || neto <= 0) {
+        return { neto: 0, totalToCharge: 0, fee: 0 };
+      }
+
+      const totalToChargeRaw = (neto + FIXED_FEE) / (1 - FEE_RATE);
+      const totalToCharge = Math.round(totalToChargeRaw * 100) / 100;
+      const fee = totalToCharge - neto;
+
+      return { neto, totalToCharge, fee };
+    }
+
+    function updateFeeUI() {
+      if (!coverFeesCheckbox || !feesLabelExtra || !feesSummary) return;
+
+      const value = parseFloat(amountInput.value) || 0;
+      const isValid = value >= 1 && value <= maxDonation;
+
+      if (!coverFeesCheckbox.checked || !isValid) {
+        feesLabelExtra.textContent = '';
+        feesSummary.textContent = '';
+        feesSummary.classList.add('hidden');
+        return;
+      }
+
+      const { neto, totalToCharge, fee } = calculateTotals(value);
+      if (!totalToCharge || !fee) {
+        feesLabelExtra.textContent = '';
+        feesSummary.textContent = '';
+        feesSummary.classList.add('hidden');
+        return;
+      }
+
+      const feeText = fee.toFixed(2).replace('.', ',');
+      const netText = neto.toFixed(2).replace('.', ',');
+      const totalText = totalToCharge.toFixed(2).replace('.', ',');
+
+      feesLabelExtra.textContent = ` (+${feeText} €) para que la donación llegue íntegra.`;
+      feesSummary.textContent = `Donación: ${netText} € + Gastos: ${feeText} € = Total: ${totalText} €`;
+      feesSummary.classList.remove('hidden');
+    }
 
     function validateAmount() {
       const value = parseFloat(amountInput.value) || 0;
@@ -151,12 +215,17 @@ const buttonId = `paypal-button-${itemId}`;
         cardContainer.style.pointerEvents = 'auto';
       }
       
+      updateFeeUI();
       return isValid;
     }
 
     // Escuchar cambios en el input
     amountInput.addEventListener('input', validateAmount);
     amountInput.addEventListener('change', validateAmount);
+
+    if (coverFeesCheckbox) {
+      coverFeesCheckbox.addEventListener('change', updateFeeUI);
+    }
 
     // Detectar si es móvil
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -251,11 +320,19 @@ const buttonId = `paypal-button-${itemId}`;
           return Promise.reject();
         }
 
+        let purchaseAmount = value;
+        if (coverFeesCheckbox && coverFeesCheckbox.checked) {
+          const { totalToCharge } = calculateTotals(value);
+          if (totalToCharge && !Number.isNaN(totalToCharge)) {
+            purchaseAmount = totalToCharge;
+          }
+        }
+
         return actions.order.create({
           intent: 'CAPTURE',
           purchase_units: [
             {
-              amount: { currency_code: 'EUR', value: String(value) },
+              amount: { currency_code: 'EUR', value: String(purchaseAmount.toFixed(2)) },
               description: `Donación para: ${itemName}`,
               custom_id: itemId,
               reference_id: itemId
