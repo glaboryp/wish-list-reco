@@ -23,3 +23,9 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 .vercel/
+
+# testing
+test-results/
+playwright-report/
+coverage/
+junit.xml
