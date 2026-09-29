@@ -1,2 +1,6 @@
+allowBuilds:
+  '@vercel/speed-insights': true
+  esbuild: false
+  sharp: false
 onlyBuiltDependencies:
   - '@vercel/speed-insights'
