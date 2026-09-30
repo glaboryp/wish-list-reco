@@ -24,6 +24,7 @@ export default defineConfig({
         env: {
             MOCK_DB: 'true',
             POSTGRES_URL: 'postgresql://user:password@host.com/dbname', // Dummy URL to satisfy neon check
+            PUBLIC_PAYPAL_CLIENT_ID: 'test', // Dummy id; the SDK request is stubbed in the E2E test
         },
     },
 });
