@@ -2,5 +2,7 @@ allowBuilds:
   '@vercel/speed-insights': true
   esbuild: false
   sharp: false
+overrides:
+  path-to-regexp: 6.3.0
 onlyBuiltDependencies:
   - '@vercel/speed-insights'
