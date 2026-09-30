@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
 
 test('Donation flow', async ({ page }) => {
+    await page.route('https://www.paypal.com/sdk/js*', (route) =>
+        route.fulfill({
+            contentType: 'application/javascript',
+            body: `window.paypal = {
+                FUNDING: { PAYPAL: 'paypal', CARD: 'card' },
+                Buttons: () => ({ render: () => Promise.resolve() }),
+            };`,
+        }),
+    );
+
     // 1. Visit Home Page
     await page.goto('/');
     await expect(page).toHaveTitle(/Lista de Deseos/);
