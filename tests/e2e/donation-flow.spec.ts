@@ -10,7 +10,7 @@ test('Donation flow', async ({ page }) => {
     await expect(items.first()).toBeVisible();
 
     // 2. Click on first item
-    await items.first().click();
+    await items.first().locator('a[href^="/item/"]').first().click();
 
     // 3. Verify Detail Page
     await expect(page.url()).toContain('/item/');
