@@ -10,6 +10,7 @@ Eliminate the 15 dependency vulnerabilities that remain on the dependency-health
 - Upgrade `@astrojs/vercel` from 9.x to its compatible 11.x release.
 - Upgrade any directly related Astro tooling only when the new framework version requires it, including `@astrojs/check`.
 - Regenerate `pnpm-lock.yaml` with pnpm and keep the existing `packageManager` declaration.
+- Declare Node.js 24.x as the project and Vercel runtime.
 - Update Astro or Vercel configuration and application code only when compatibility checks demonstrate that the migration requires it.
 - Update the existing dependency-health PR with the final audit and validation evidence.
 
