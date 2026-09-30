@@ -1,9 +1,10 @@
 import { neon } from '@neondatabase/serverless';
 
-// La variable de entorno POSTGRES_URL es la que nos dio Vercel
-// y que ya está en el archivo .env
-// const url = import.meta.env?.POSTGRES_URL || process.env.POSTGRES_URL || 'postgres://mock';
-const url = process.env.POSTGRES_URL || 'postgresql://user:password@host.com/dbname';
+const url = import.meta.env.POSTGRES_URL;
+
+if (!url) {
+    throw new Error('POSTGRES_URL no está configurada');
+}
 
 let sql: any;
 
