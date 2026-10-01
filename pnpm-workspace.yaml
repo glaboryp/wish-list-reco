@@ -4,5 +4,3 @@ allowBuilds:
   sharp: false
 overrides:
   path-to-regexp: 6.3.0
-onlyBuiltDependencies:
-  - '@vercel/speed-insights'
