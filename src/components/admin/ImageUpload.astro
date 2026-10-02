@@ -1,0 +1,58 @@
+---
+import { labelClass } from "./ui";
+
+interface Props {
+  slug: string;
+  name: string;
+  label: string;
+  current?: string | null;
+}
+
+const { slug, name, label, current = null } = Astro.props;
+const inputId = `upload-${name}`;
+---
+
+<div class="space-y-2" data-upload data-slug={slug}>
+  <label class={labelClass} for={inputId}>{label}</label>
+  {current && <img src={current} alt="" class="h-24 rounded border border-gray-200 object-cover" />}
+  <input id={inputId} type="file" accept="image/webp,image/jpeg,image/png" class="block text-sm" />
+  <input type="hidden" name={name} value="" />
+  <p class="text-xs text-gray-600" data-status hidden></p>
+</div>
+
+<script>
+  import { upload } from '@vercel/blob/client';
+
+  document.querySelectorAll<HTMLElement>('[data-upload]').forEach((root) => {
+    const file = root.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const hidden = root.querySelector<HTMLInputElement>('input[type="hidden"]')!;
+    const status = root.querySelector<HTMLElement>('[data-status]')!;
+    const slug = root.dataset.slug!;
+    const submitButtons = () =>
+      Array.from(file.form?.querySelectorAll<HTMLButtonElement>('button[type="submit"]') ?? []);
+
+    file.addEventListener('change', async () => {
+      const selected = file.files?.[0];
+      if (!selected) return;
+
+      status.hidden = false;
+      status.textContent = 'Subiendo imagen...';
+      submitButtons().forEach((button) => (button.disabled = true));
+
+      try {
+        const safeName = selected.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const blob = await upload(`${slug}/${crypto.randomUUID()}-${safeName}`, selected, {
+          access: 'public',
+          handleUploadUrl: `/api/${slug}/upload`,
+        });
+        hidden.value = blob.url;
+        status.textContent = 'Imagen subida. Guarda los cambios para aplicarla.';
+      } catch {
+        hidden.value = '';
+        status.textContent = 'No se pudo subir la imagen (webp, jpg o png, máximo 5 MB).';
+      } finally {
+        submitButtons().forEach((button) => (button.disabled = false));
+      }
+    });
+  });
+</script>

@@ -1,0 +1,68 @@
+---
+import "../styles/global.css";
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Entrar - Listas de deseos</title>
+  </head>
+  <body class="antialiased">
+    <main class="mx-auto max-w-md px-4 py-24 text-center">
+      <h1 class="text-3xl font-bold text-gray-900 mb-3">Acceso al panel</h1>
+      <p class="text-gray-600 mb-8">Entra con la cuenta de Google que tiene dado de alta tu centro.</p>
+      <button
+        id="google-login"
+        type="button"
+        class="inline-flex items-center rounded-lg bg-teal-700 px-6 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+      >
+        Entrar con Google
+      </button>
+      <p id="login-error" class="mt-4 text-sm text-red-600" hidden></p>
+    </main>
+
+    <script>
+      import { initializeApp } from 'firebase/app';
+      import { GoogleAuthProvider, getAuth, signInWithPopup } from 'firebase/auth';
+
+      const app = initializeApp({
+        apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
+        authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
+        projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
+      });
+
+      const button = document.getElementById('google-login') as HTMLButtonElement;
+      const errorBox = document.getElementById('login-error') as HTMLElement;
+
+      const fail = (message: string) => {
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+        button.disabled = false;
+      };
+
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        errorBox.hidden = true;
+        try {
+          const result = await signInWithPopup(getAuth(app), new GoogleAuthProvider());
+          const idToken = await result.user.getIdToken();
+          const response = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken }),
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            fail(body.error ?? 'No se pudo iniciar sesión');
+            return;
+          }
+          window.location.assign(body.redirect);
+        } catch {
+          fail('No se pudo iniciar sesión con Google');
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+---
+import "../styles/global.css";
+import Analytics from '@vercel/analytics/astro';
+import SpeedInsights from "@vercel/speed-insights/astro";
+import { darken, isHexColor } from "../lib/color";
+
+interface Props {
+  title: string;
+  primaryColor?: string;
+  paypalClientId?: string | null;
+}
+
+const { title, primaryColor = '#007986', paypalClientId = null } = Astro.props;
+const color = isHexColor(primaryColor) ? primaryColor : '#007986';
+const hover = darken(color, 0.2);
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    {paypalClientId && (
+      <script src={`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=EUR&intent=capture&disable-funding=paylater&components=buttons`} data-sdk-integration-source="astro" data-namespace="paypal"></script>
+    )}
+  </head>
+  <body class="antialiased" style={`--primary: ${color}; --primary-hover: ${hover};`}>
+    <slot />
+    <Analytics />
+    <SpeedInsights />
+  </body>
+</html>

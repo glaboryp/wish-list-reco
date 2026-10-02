@@ -1,0 +1,70 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { buttonClass, cardClass, dangerButtonClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { parseEmail } from "../../../lib/admin/forms";
+import { guardCenter } from "../../../lib/auth/guard";
+import { addCenterUser, listCenterUsers, removeCenterUser } from "../../../lib/repo/users";
+
+const guard = await guardCenter(Astro);
+if (guard instanceof Response) return guard;
+const { actor, center } = guard;
+const here = `/${center.slug}/admin/users`;
+const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const parsed = parseEmail(form.get('email'));
+  if (!parsed.ok) return fail(parsed.error);
+
+  if (form.get('intent') === 'remove') {
+    const outcome = await removeCenterUser(center.id, parsed.value, { force: actor.isSuperadmin });
+    if (outcome === 'last') return fail('No se puede quitar al último encargado del centro');
+    if (outcome === 'missing') return fail('Ese correo no es encargado de este centro');
+    return Astro.redirect(`${here}?ok=1`, 303);
+  }
+
+  await addCenterUser(center.id, parsed.value);
+  return Astro.redirect(`${here}?ok=1`, 303);
+}
+
+const users = await listCenterUsers(center.id);
+---
+
+<AdminLayout title="Usuarios" actor={actor} center={center} active="users">
+  <form method="post" class={`${cardClass} space-y-4`}>
+    <h2 class="text-lg font-semibold text-gray-900">Añadir encargado</h2>
+    <p class="text-sm text-gray-600">Podrá entrar con la cuenta de Google de este correo.</p>
+    <div>
+      <label class={labelClass} for="email">Correo de Google</label>
+      <input id="email" name="email" type="email" class={inputClass} required />
+    </div>
+    <button type="submit" class={buttonClass}>Añadir</button>
+  </form>
+
+  <div class={`${cardClass} overflow-x-auto`}>
+    <table class="w-full text-left text-sm">
+      <thead class="text-xs uppercase text-gray-500">
+        <tr>
+          <th class="py-2 pr-4">Correo</th>
+          <th class="py-2 pr-4">Estado</th>
+          <th class="py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {users.map((user) => (
+          <tr>
+            <td class="py-3 pr-4 font-medium text-gray-900">{user.email}</td>
+            <td class="py-3 pr-4">{user.firebase_uid ? 'Ha entrado' : 'Pendiente de primer acceso'}</td>
+            <td class="py-3 text-right">
+              <form method="post">
+                <input type="hidden" name="intent" value="remove" />
+                <input type="hidden" name="email" value={user.email} />
+                <button type="submit" class={dangerButtonClass}>Quitar</button>
+              </form>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>

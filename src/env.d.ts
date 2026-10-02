@@ -1,12 +1,14 @@
 /// <reference types="astro/client" />
 
 interface ImportMetaEnv {
-  readonly PAYPAL_CLIENT_ID: string;
-  readonly PAYPAL_APP_SECRET: string;
-  readonly PUBLIC_PAYPAL_ENVIRONMENT: 'sandbox' | 'live';
-  readonly PUBLIC_PAYPAL_CLIENT_ID: string;
   readonly POSTGRES_URL: string;
   readonly BLOB_READ_WRITE_TOKEN?: string;
+  readonly ENCRYPTION_KEY: string;
+  readonly SESSION_SECRET: string;
+  readonly SUPERADMIN_EMAIL: string;
+  readonly PUBLIC_FIREBASE_API_KEY: string;
+  readonly PUBLIC_FIREBASE_AUTH_DOMAIN: string;
+  readonly PUBLIC_FIREBASE_PROJECT_ID: string;
 }
 
 interface ImportMeta {

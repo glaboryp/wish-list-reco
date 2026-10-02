@@ -2,11 +2,12 @@
 interface Props {
   itemId: string;
   itemName: string;
+  slug: string;
   maxDonation: number;
   isDetailPage?: boolean;
 }
 
-const { itemId, itemName, maxDonation, isDetailPage = false } = Astro.props;
+const { itemId, itemName, slug, maxDonation, isDetailPage = false } = Astro.props;
 
 // IDs únicos para este componente
 const inputId = `amount-${itemId}`;
@@ -156,6 +157,7 @@ const buttonId = `paypal-button-${itemId}`;
     buttonId,
     itemId,
     itemName,
+    slug,
     maxDonation,
     isDetailPage,
   }}
@@ -406,7 +408,7 @@ const buttonId = `paypal-button-${itemId}`;
         const coverFees = coverFeesCheckbox && coverFeesCheckbox.checked;
 
         try {
-          const response = await fetch("/api/paypal/create-order", {
+          const response = await fetch(`/api/${slug}/paypal/create-order`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -438,32 +440,40 @@ const buttonId = `paypal-button-${itemId}`;
         hideLoading();
         isProcessing = false;
       },
-      onApprove: async (data, actions) => {
-        // Mantener el loading mientras se procesa el pago
-        try {
-          const r = await fetch("/api/paypal/capture-order", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderID: data.orderID }),
-          });
+      onApprove: async (data) => {
+        const attempts = 3;
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+          try {
+            const r = await fetch(`/api/${slug}/paypal/capture-order`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ orderID: data.orderID }),
+            });
+            const json = await r.json();
 
-          const json = await r.json();
-
-          if (r.ok) {
-            showToast(
-              "¡Pago completado con éxito! Gracias por tu contribución 🎉",
-              "success",
-            );
-            setTimeout(() => window.location.reload(), 2000);
-          } else {
-            hideLoading();
-            isProcessing = false;
-            showToast(json.error || "Error al procesar el pago", "error");
+            if (r.ok) {
+              showToast(
+                "¡Pago completado con éxito! Gracias por tu contribución 🎉",
+                "success",
+              );
+              setTimeout(() => window.location.reload(), 2000);
+              return;
+            }
+            if (r.status < 500 || attempt === attempts) {
+              hideLoading();
+              isProcessing = false;
+              showToast(json.error || "Error al procesar el pago", "error");
+              return;
+            }
+          } catch (e) {
+            if (attempt === attempts) {
+              hideLoading();
+              isProcessing = false;
+              showToast("Error de red al capturar el pago", "error");
+              return;
+            }
           }
-        } catch (e) {
-          hideLoading();
-          isProcessing = false;
-          showToast("Error de red al capturar el pago", "error");
+          await new Promise((resolve) => setTimeout(resolve, 1500));
         }
       },
       onError: (err) => {

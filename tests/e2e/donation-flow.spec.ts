@@ -11,35 +11,46 @@ test('Donation flow', async ({ page }) => {
         }),
     );
 
-    // 1. Visit Home Page
-    await page.goto('/');
-    await expect(page).toHaveTitle(/Lista de Deseos/);
+    await page.goto('/recoletos');
+    await expect(page).toHaveTitle(/Lista de deseos/);
 
-    // Check if items are displayed
     const items = page.locator('article');
     await expect(items.first()).toBeVisible();
 
-    // 2. Click on first item
-    await items.first().locator('a[href^="/item/"]').first().click();
+    await items.first().locator('a[href^="/recoletos/item/"]').first().click();
 
-    // 3. Verify Detail Page
-    await expect(page.url()).toContain('/item/');
+    await expect(page.url()).toContain('/recoletos/item/');
     await expect(page.locator('h1')).toBeVisible();
 
-    // 4. Check Donation Form
     const amountInput = page.locator('input[name="amount"]');
     await expect(amountInput).toBeVisible();
 
-    // 5. Try invalid amount
     await amountInput.fill('999999');
     await amountInput.blur();
     await expect(page.locator('text=La cantidad no puede superar')).toBeVisible();
 
-    // 6. Try valid amount
     await amountInput.fill('10');
     await amountInput.blur();
     await expect(page.locator('text=La cantidad no puede superar')).not.toBeVisible();
+});
 
-    // Note: We cannot easily test PayPal iframe interactions in E2E without complex setup
-    // But we verified the form logic and navigation
+test('Home lists the active centers', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: 'Recoletos' })).toBeVisible();
+});
+
+test('Unknown and uppercase slugs give 404', async ({ request }) => {
+    expect((await request.get('/no-existe')).status()).toBe(404);
+    expect((await request.get('/Recoletos')).status()).toBe(404);
+});
+
+test('Legacy item URLs redirect to the Recoletos center', async ({ request }) => {
+    const response = await request.get('/item/33333333-3333-4333-8333-333333333333', { maxRedirects: 0 });
+    expect(response.status()).toBe(301);
+    expect(response.headers()['location']).toBe('/recoletos/item/33333333-3333-4333-8333-333333333333');
+});
+
+test('A non-uuid item id does not crash the page', async ({ request }) => {
+    const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
+    expect(response.status()).toBe(302);
 });

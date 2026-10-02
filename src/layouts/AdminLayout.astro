@@ -1,0 +1,69 @@
+---
+import "../styles/global.css";
+import type { Actor } from "../lib/auth/access";
+import { listMembershipsByEmail } from "../lib/repo/users";
+import type { Center } from "../types/database";
+
+interface Props {
+  title: string;
+  actor: Actor;
+  center?: Center;
+  active?: 'appearance' | 'items' | 'donations' | 'users' | 'centers';
+}
+
+const { title, actor, center, active } = Astro.props;
+const ok = Astro.url.searchParams.get('ok');
+const error = Astro.url.searchParams.get('error');
+const memberships = actor.isSuperadmin ? [] : await listMembershipsByEmail(actor.email);
+const base = center ? `/${center.slug}/admin` : '/admin';
+const nav = center
+  ? [
+      { key: 'appearance', label: 'Apariencia', href: base },
+      { key: 'items', label: 'Artículos', href: `${base}/items` },
+      { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
+      { key: 'users', label: 'Usuarios', href: `${base}/users` },
+    ]
+  : [{ key: 'centers', label: 'Centros', href: '/admin' }];
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex" />
+    <title>{title} - Panel</title>
+  </head>
+  <body class="antialiased">
+    <header class="border-b border-gray-200 bg-white">
+      <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Panel</p>
+          <p class="text-lg font-semibold text-gray-900">{center ? center.name : 'Administración'}</p>
+        </div>
+        <nav class="flex flex-wrap items-center gap-4 text-sm">
+          {nav.map((entry) => (
+            <a href={entry.href} class={entry.key === active ? 'font-semibold text-teal-700' : 'text-gray-600 hover:text-gray-900'}>
+              {entry.label}
+            </a>
+          ))}
+          {center && <a href={`/${center.slug}`} class="text-gray-600 hover:text-gray-900">Ver mi web</a>}
+          {actor.isSuperadmin && center && <a href="/admin" class="text-gray-600 hover:text-gray-900">Todos los centros</a>}
+          {memberships.length > 1 && memberships.map((m) => (
+            <a href={`/${m.slug}/admin`} class="text-gray-600 hover:text-gray-900">{m.name}</a>
+          ))}
+          <form method="post" action="/api/auth/logout">
+            <button type="submit" class="text-gray-600 hover:text-gray-900">Salir</button>
+          </form>
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-8 space-y-6">
+      <h1 class="text-2xl font-bold text-gray-900">{title}</h1>
+      {ok && <p class="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">Cambios guardados</p>}
+      {error && <p class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+      <slot />
+    </main>
+  </body>
+</html>

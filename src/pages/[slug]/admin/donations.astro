@@ -1,0 +1,101 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { buttonClass, cardClass, dangerButtonClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { parseManualDonation } from "../../../lib/admin/forms";
+import { guardCenter } from "../../../lib/auth/guard";
+import { isUuid } from "../../../lib/ids";
+import { addManualDonation, listDonations, voidManualDonation } from "../../../lib/repo/donations";
+import { listAdminItems } from "../../../lib/repo/items";
+
+const guard = await guardCenter(Astro);
+if (guard instanceof Response) return guard;
+const { actor, center } = guard;
+const here = `/${center.slug}/admin/donations`;
+const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  if (form.get('intent') === 'void') {
+    const donationId = String(form.get('donation_id') ?? '');
+    if (!isUuid(donationId) || !(await voidManualDonation(center.id, donationId))) {
+      return fail('No se pudo anular la donación');
+    }
+    return Astro.redirect(`${here}?ok=1`, 303);
+  }
+
+  const parsed = parseManualDonation(form);
+  if (!parsed.ok) return fail(parsed.error);
+  const created = await addManualDonation({ centerId: center.id, ...parsed.value });
+  if (!created) return fail('El artículo no existe en este centro');
+  return Astro.redirect(`${here}?ok=1`, 303);
+}
+
+const [donations, items] = await Promise.all([listDonations(center.id), listAdminItems(center.id)]);
+const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+---
+
+<AdminLayout title="Donaciones" actor={actor} center={center} active="donations">
+  <form method="post" class={`${cardClass} space-y-4`}>
+    <h2 class="text-lg font-semibold text-gray-900">Añadir donación manual</h2>
+    <p class="text-sm text-gray-600">Para donaciones recibidas fuera de PayPal (efectivo, transferencia...).</p>
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div>
+        <label class={labelClass} for="item_id">Artículo</label>
+        <select id="item_id" name="item_id" class={inputClass} required>
+          {items.filter((item) => item.status !== 'archived').map((item) => (
+            <option value={item.id}>{item.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class={labelClass} for="amount">Importe (€)</label>
+        <input id="amount" name="amount" class={inputClass} inputmode="decimal" required />
+      </div>
+      <div>
+        <label class={labelClass} for="note">Nota</label>
+        <input id="note" name="note" class={inputClass} maxlength="200" />
+      </div>
+    </div>
+    <button type="submit" class={buttonClass}>Añadir donación</button>
+  </form>
+
+  <div class={`${cardClass} overflow-x-auto`}>
+    {donations.length === 0 ? (
+      <p class="text-gray-500">Todavía no hay donaciones.</p>
+    ) : (
+      <table class="w-full text-left text-sm">
+        <thead class="text-xs uppercase text-gray-500">
+          <tr>
+            <th class="py-2 pr-4">Fecha</th>
+            <th class="py-2 pr-4">Artículo</th>
+            <th class="py-2 pr-4">Importe</th>
+            <th class="py-2 pr-4">Origen</th>
+            <th class="py-2 pr-4">Nota</th>
+            <th class="py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {donations.map((donation) => (
+            <tr class={donation.voided_at ? 'text-gray-400 line-through' : ''}>
+              <td class="py-3 pr-4">{date.format(new Date(donation.created_at))}</td>
+              <td class="py-3 pr-4">{donation.item_name}</td>
+              <td class="py-3 pr-4">{Number(donation.amount).toFixed(2)} {donation.currency}</td>
+              <td class="py-3 pr-4">{donation.source === 'paypal' ? 'PayPal' : 'Manual'}</td>
+              <td class="py-3 pr-4">{donation.note ?? ''}</td>
+              <td class="py-3 text-right">
+                {donation.source === 'manual' && !donation.voided_at && (
+                  <form method="post">
+                    <input type="hidden" name="intent" value="void" />
+                    <input type="hidden" name="donation_id" value={donation.id} />
+                    <button type="submit" class={dangerButtonClass}>Anular</button>
+                  </form>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+</AdminLayout>

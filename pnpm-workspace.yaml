@@ -1,6 +1,9 @@
 allowBuilds:
+  '@firebase/util': false
   '@vercel/speed-insights': true
   esbuild: false
+  protobufjs: false
   sharp: false
 overrides:
   path-to-regexp: 6.3.0
+  '@grpc/grpc-js': ^1.14.5

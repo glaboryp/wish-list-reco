@@ -1,0 +1,46 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import ImageUpload from "../../../components/admin/ImageUpload.astro";
+import { buttonClass, cardClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { parseAppearance } from "../../../lib/admin/forms";
+import { guardCenter } from "../../../lib/auth/guard";
+import { updateAppearance } from "../../../lib/repo/centers";
+
+const guard = await guardCenter(Astro);
+if (guard instanceof Response) return guard;
+const { actor, center } = guard;
+const here = `/${center.slug}/admin`;
+
+if (Astro.request.method === 'POST') {
+  const parsed = parseAppearance(await Astro.request.formData(), center.slug);
+  if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
+  await updateAppearance(center.id, parsed.value);
+  return Astro.redirect(`${here}?ok=1`, 303);
+}
+---
+
+<AdminLayout title="Apariencia" actor={actor} center={center} active="appearance">
+  <form method="post" class={`${cardClass} space-y-6`}>
+    <div>
+      <label class={labelClass} for="name">Nombre del centro</label>
+      <input id="name" name="name" class={inputClass} value={center.name} maxlength="80" required />
+    </div>
+    <div>
+      <label class={labelClass} for="hero_title">Título de la portada</label>
+      <input id="hero_title" name="hero_title" class={inputClass} value={center.hero_title} maxlength="200" />
+    </div>
+    <div>
+      <label class={labelClass} for="hero_text">Texto de presentación</label>
+      <textarea id="hero_text" name="hero_text" class={inputClass} rows="8" maxlength="4000">{center.hero_text}</textarea>
+      <p class="mt-1 text-xs text-gray-500">Separa los párrafos con una línea en blanco.</p>
+    </div>
+    <div>
+      <label class={labelClass} for="primary_color">Color principal</label>
+      <input id="primary_color" name="primary_color" type="color" value={center.primary_color} class="h-10 w-20 rounded border border-gray-300" />
+      <p class="mt-1 text-xs text-gray-500">Debe contrastar con el texto blanco; si es demasiado claro no se guardará.</p>
+    </div>
+    <ImageUpload slug={center.slug} name="hero_image_url" label="Imagen de portada" current={center.hero_image_url} />
+    <ImageUpload slug={center.slug} name="logo_url" label="Logo" current={center.logo_url} />
+    <button type="submit" class={buttonClass}>Guardar cambios</button>
+  </form>
+</AdminLayout>
