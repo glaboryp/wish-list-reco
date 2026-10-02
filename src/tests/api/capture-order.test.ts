@@ -1,112 +1,92 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST } from '../../pages/api/paypal/capture-order';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockSql } = vi.hoisted(() => {
-    return { mockSql: vi.fn() };
-});
-
-vi.mock('../../lib/db', () => ({
-    default: mockSql
+const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder } = vi.hoisted(() => ({
+  getCenterWithSecret: vi.fn(),
+  recordPaypalDonation: vi.fn(),
+  credentialsFor: vi.fn(),
+  captureOrder: vi.fn(),
 }));
 
-// Mock Fetch
-global.fetch = vi.fn();
+vi.mock('../../lib/repo/centers', () => ({ getCenterWithSecret }));
+vi.mock('../../lib/repo/donations', () => ({ recordPaypalDonation }));
+vi.mock('../../lib/paypal', () => ({ credentialsFor, captureOrder }));
 
-describe('POST /api/paypal/capture-order', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        vi.stubEnv('PAYPAL_CLIENT_ID', 'test_client_id');
-        vi.stubEnv('PAYPAL_APP_SECRET', 'test_secret');
+import { POST } from '../../pages/api/[slug]/paypal/capture-order';
+
+const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1' };
+const center = { id: 'c1', slug: 'recoletos', status: 'active' };
+
+const call = (body: unknown, slug = 'recoletos') =>
+  POST({
+    request: new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }),
+    params: { slug },
+  } as any);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getCenterWithSecret.mockResolvedValue(center);
+  credentialsFor.mockReturnValue({ clientId: 'cid', clientSecret: 's', env: 'sandbox' });
+  captureOrder.mockResolvedValue(capture);
+  recordPaypalDonation.mockResolvedValue('created');
+});
+
+describe('POST /api/[slug]/paypal/capture-order', () => {
+  it('returns 404 for an unknown center', async () => {
+    getCenterWithSecret.mockResolvedValue(null);
+    expect((await call({ orderID: 'O1' })).status).toBe(404);
+  });
+
+  it('returns 400 if orderID is missing', async () => {
+    expect((await call({})).status).toBe(400);
+  });
+
+  it('returns 503 without credentials', async () => {
+    credentialsFor.mockReturnValue(null);
+    expect((await call({ orderID: 'O1' })).status).toBe(503);
+  });
+
+  it('returns 500 if the capture fails', async () => {
+    captureOrder.mockRejectedValue(new Error('boom'));
+    expect((await call({ orderID: 'O1' })).status).toBe(500);
+    expect(recordPaypalDonation).not.toHaveBeenCalled();
+  });
+
+  it('records the donation against the center of the route', async () => {
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, amount: '12.00', itemId: 'item-1', duplicate: false });
+    expect(recordPaypalDonation).toHaveBeenCalledWith({
+      centerId: 'c1',
+      itemId: 'item-1',
+      amount: '12.00',
+      currency: 'EUR',
+      captureId: 'CAP1',
     });
+  });
 
-    it('should return 400 if orderID is missing', async () => {
-        const request = new Request('http://localhost', {
-            method: 'POST',
-            body: JSON.stringify({})
-        });
-        const response = await POST({ request } as any);
-        expect(response.status).toBe(400);
-    });
+  it('is idempotent when the capture was already recorded', async () => {
+    recordPaypalDonation.mockResolvedValue('duplicate');
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(200);
+    expect((await response.json()).duplicate).toBe(true);
+  });
 
-    it('should return 500 if PayPal token fails', async () => {
-        (global.fetch as any).mockResolvedValueOnce({
-            ok: false,
-            text: async () => 'Error',
-            status: 401
-        });
+  it('still captures an approved order when the center was disabled mid-flow', async () => {
+    getCenterWithSecret.mockResolvedValue({ ...center, status: 'disabled' });
+    expect((await call({ orderID: 'O1' })).status).toBe(200);
+  });
 
-        const request = new Request('http://localhost', {
-            method: 'POST',
-            body: JSON.stringify({ orderID: '123' })
-        });
-        const response = await POST({ request } as any);
-        expect(response.status).toBe(500);
-    });
+  it('reports the payment id when the database write fails after capture', async () => {
+    recordPaypalDonation.mockRejectedValue(new Error('db down'));
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ paymentId: 'CAP1', itemId: 'item-1', amount: '12.00' });
+  });
 
-    it('should return 500 if capture fails', async () => {
-        // Token success
-        (global.fetch as any)
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ access_token: 'fake_token' })
-            })
-            // Capture fail
-            .mockResolvedValueOnce({
-                ok: false,
-                status: 400,
-                json: async () => ({})
-            });
-
-        const request = new Request('http://localhost', {
-            method: 'POST',
-            body: JSON.stringify({ orderID: '123' })
-        });
-        const response = await POST({ request } as any);
-        expect(response.status).toBe(500);
-    });
-
-    it('should process successful capture and update DB', async () => {
-        // Token success
-        (global.fetch as any)
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ access_token: 'fake_token' })
-            })
-            // Capture success
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    status: 'COMPLETED',
-                    purchase_units: [{
-                        payments: {
-                            captures: [{
-                                amount: { value: '10.00', currency_code: 'EUR' },
-                                custom_id: '1'
-                            }]
-                        }
-                    }]
-                })
-            });
-
-        // Mock DB update
-        mockSql.mockResolvedValue([{
-            id: '1',
-            name: 'Test Item',
-            raised_amount: '60',
-            goal_amount: '100',
-            status: 'active'
-        }]);
-
-        const request = new Request('http://localhost', {
-            method: 'POST',
-            body: JSON.stringify({ orderID: 'ORDER-123' })
-        });
-        const response = await POST({ request } as any);
-
-        expect(response.status).toBe(200);
-        const data = await response.json();
-        expect(data.ok).toBe(true);
-        expect(data.amount).toBe('10.00');
-        expect(mockSql).toHaveBeenCalled();
-    });
+  it('reports the payment id when the item does not belong to the center', async () => {
+    recordPaypalDonation.mockResolvedValue('item_not_found');
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(500);
+    expect((await response.json()).paymentId).toBe('CAP1');
+  });
 });
