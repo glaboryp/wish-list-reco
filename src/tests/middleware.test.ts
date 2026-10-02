@@ -17,6 +17,37 @@ describe('middleware', () => {
     expect(csp).toContain('https://*.vercel-storage.com');
   });
 
+  it('redirects GET requests on the legacy domain without running the app', async () => {
+    let reachedApp = false;
+    const response = await (onRequest as any)(
+      { request: new Request('https://wish-list-reco.vercel.app/') },
+      async () => {
+        reachedApp = true;
+        return new Response('ok');
+      },
+    );
+    expect(response.status).toBe(307);
+    expect(response.headers.get('Location')).toBe('https://wish-list-oratorio.vercel.app/recoletos');
+    expect(reachedApp).toBe(false);
+  });
+
+  it('redirects HEAD requests on the legacy domain and keeps the path', async () => {
+    const response = await run(new Request('https://wish-list-reco.vercel.app/item/abc?x=1', { method: 'HEAD' }));
+    expect(response.status).toBe(307);
+    expect(response.headers.get('Location')).toBe('https://wish-list-oratorio.vercel.app/item/abc?x=1');
+  });
+
+  it('does not redirect writes on the legacy domain', async () => {
+    const response = await run(
+      new Request('https://wish-list-reco.vercel.app/x', { method: 'POST', headers: { origin: 'https://evil.example.com' } }),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('does not redirect the canonical domain', async () => {
+    expect((await run(new Request('https://wish-list-oratorio.vercel.app/'))).status).toBe(200);
+  });
+
   it('lets safe methods through without an Origin', async () => {
     expect((await run(new Request('https://wish-list.vercel.app/'))).status).toBe(200);
   });
