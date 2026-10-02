@@ -1,5 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
 import { isSameOrigin, SAFE_METHODS } from './lib/http';
+import { legacyRedirectTarget } from './lib/legacy-redirect';
 
 const CSP = [
     "default-src 'self'",
@@ -11,6 +12,13 @@ const CSP = [
 ].join('; ') + ';';
 
 export const onRequest = defineMiddleware(async (context: any, next: any) => {
+    if (context.request.method === 'GET' || context.request.method === 'HEAD') {
+        const legacyTarget = legacyRedirectTarget(new URL(context.request.url));
+        if (legacyTarget) {
+            return new Response(null, { status: 307, headers: { Location: legacyTarget } });
+        }
+    }
+
     if (!SAFE_METHODS.has(context.request.method) && !isSameOrigin(context.request)) {
         return new Response('Forbidden', { status: 403 });
     }
