@@ -1,19 +1,35 @@
 ---
 import "../styles/global.css";
+import Icon from "../components/Icon.astro";
+import { secondaryButtonClass } from "../components/admin/ui";
 import type { Actor } from "../lib/auth/access";
 import { listMembershipsByEmail } from "../lib/repo/users";
 import type { Center } from "../types/database";
 
 interface Props {
   title: string;
+  intro?: string;
   actor: Actor;
   center?: Center;
   active?: 'appearance' | 'items' | 'donations' | 'users' | 'centers';
 }
 
-const { title, actor, center, active } = Astro.props;
+const { title, intro, actor, center, active } = Astro.props;
+
+const successMessages: Record<string, string> = {
+  'item-created': 'Artículo creado. Ya aparece en tu web si está visible.',
+  'item-saved': 'Artículo guardado.',
+  'item-removed': 'Artículo borrado.',
+  'donation-added': 'Donación añadida.',
+  'donation-voided': 'Donación anulada. Ya no suma en el total.',
+  'user-added': 'Encargado añadido. Ya puede entrar con su cuenta de Google.',
+  'user-removed': 'Encargado quitado.',
+  'center-created': 'Centro creado.',
+};
 const ok = Astro.url.searchParams.get('ok');
+const okMessage = ok ? (successMessages[ok] ?? 'Cambios guardados.') : null;
 const error = Astro.url.searchParams.get('error');
+
 const memberships = actor.isSuperadmin ? [] : await listMembershipsByEmail(actor.email);
 const base = center ? `/${center.slug}/admin` : '/admin';
 const nav = center
@@ -21,7 +37,7 @@ const nav = center
       { key: 'appearance', label: 'Apariencia', href: base },
       { key: 'items', label: 'Artículos', href: `${base}/items` },
       { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
-      { key: 'users', label: 'Usuarios', href: `${base}/users` },
+      { key: 'users', label: 'Encargados', href: `${base}/users` },
     ]
   : [{ key: 'centers', label: 'Centros', href: '/admin' }];
 ---
@@ -30,40 +46,105 @@ const nav = center
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/webp" href="/favicon.webp" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>{title} - Panel</title>
   </head>
   <body class="antialiased">
-    <header class="border-b border-gray-200 bg-white">
-      <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-4">
-        <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500">Panel</p>
-          <p class="text-lg font-semibold text-gray-900">{center ? center.name : 'Administración'}</p>
+    <header class="border-b border-line bg-white">
+      <div class="mx-auto max-w-5xl px-4">
+        <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4">
+          <div class="min-w-0">
+            {actor.isSuperadmin && center && (
+              <a href="/admin" class="mb-1 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline">
+                <Icon name="arrow-left" class="h-4 w-4" />
+                Todos los centros
+              </a>
+            )}
+            {!actor.isSuperadmin && memberships.length > 1 && center ? (
+              <label class="flex items-center gap-2">
+                <span class="sr-only">Cambiar de centro</span>
+                <select
+                  id="center-switch"
+                  class="max-w-full rounded-lg border border-line-strong bg-white py-2 pl-3 pr-8 text-lg font-bold text-ink"
+                >
+                  {memberships.map((m) => (
+                    <option value={`/${m.slug}/admin`} selected={m.slug === center.slug}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p class="truncate text-xl font-bold text-ink">{center ? center.name : 'Administración'}</p>
+            )}
+          </div>
+          <div class="flex items-center gap-3">
+            {center && (
+              <a href={`/${center.slug}`} target="_blank" rel="noopener noreferrer" class={`${secondaryButtonClass} px-4!`}>
+                Ver mi web
+                <Icon name="arrow-up-right" class="h-4 w-4" />
+                <span class="sr-only">(se abre en una pestaña nueva)</span>
+              </a>
+            )}
+            <form method="post" action="/api/auth/logout">
+              <button type="submit" class={`${secondaryButtonClass} px-4!`}>
+                <Icon name="sign-out" class="h-4 w-4" />
+                Salir
+              </button>
+            </form>
+          </div>
         </div>
-        <nav class="flex flex-wrap items-center gap-4 text-sm">
-          {nav.map((entry) => (
-            <a href={entry.href} class={entry.key === active ? 'font-semibold text-teal-700' : 'text-gray-600 hover:text-gray-900'}>
-              {entry.label}
-            </a>
-          ))}
-          {center && <a href={`/${center.slug}`} class="text-gray-600 hover:text-gray-900">Ver mi web</a>}
-          {actor.isSuperadmin && center && <a href="/admin" class="text-gray-600 hover:text-gray-900">Todos los centros</a>}
-          {memberships.length > 1 && memberships.map((m) => (
-            <a href={`/${m.slug}/admin`} class="text-gray-600 hover:text-gray-900">{m.name}</a>
-          ))}
-          <form method="post" action="/api/auth/logout">
-            <button type="submit" class="text-gray-600 hover:text-gray-900">Salir</button>
-          </form>
-        </nav>
+        {center && (
+          <nav aria-label="Secciones del panel" class="-mb-px flex gap-1 overflow-x-auto">
+            {nav.map((entry) => (
+              <a
+                href={entry.href}
+                aria-current={entry.key === active ? 'page' : undefined}
+                class={`inline-flex min-h-12 items-center whitespace-nowrap border-b-2 px-4 text-base font-semibold transition-colors ${
+                  entry.key === active
+                    ? 'border-brand text-brand'
+                    : 'border-transparent text-muted hover:border-line-strong hover:text-ink'
+                }`}
+              >
+                {entry.label}
+              </a>
+            ))}
+          </nav>
+        )}
       </div>
     </header>
 
-    <main class="mx-auto max-w-5xl px-4 py-8 space-y-6">
-      <h1 class="text-2xl font-bold text-gray-900">{title}</h1>
-      {ok && <p class="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">Cambios guardados</p>}
-      {error && <p class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+    <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+      <div>
+        <h1 class="text-2xl font-bold text-ink sm:text-3xl">{title}</h1>
+        {intro && <p class="mt-2 max-w-2xl text-base text-muted">{intro}</p>}
+      </div>
+      {okMessage && (
+        <div role="status" data-flash class="flex items-start gap-3 rounded-lg bg-green-50 px-4 py-3 text-base text-green-900 ring-1 ring-green-200">
+          <Icon name="check-circle" class="mt-0.5 h-5 w-5 shrink-0" />
+          <p class="flex-1">{okMessage}</p>
+          <button type="button" data-dismiss class="-m-1 rounded p-1 hover:bg-green-100">
+            <span class="sr-only">Cerrar aviso</span>
+            <Icon name="x" class="h-5 w-5" />
+          </button>
+        </div>
+      )}
+      {error && (
+        <div role="alert" class="flex items-start gap-3 rounded-lg bg-red-50 px-4 py-3 text-base text-red-900 ring-1 ring-red-200">
+          <Icon name="warning-circle" class="mt-0.5 h-5 w-5 shrink-0" />
+          <p class="flex-1">{error}</p>
+        </div>
+      )}
       <slot />
     </main>
+
+    <script>
+      document.querySelectorAll<HTMLElement>('[data-flash]').forEach((flash) => {
+        flash.querySelector('[data-dismiss]')?.addEventListener('click', () => flash.remove());
+        setTimeout(() => flash.remove(), 8000);
+      });
+      document.getElementById('center-switch')?.addEventListener('change', (event) => {
+        window.location.assign((event.target as HTMLSelectElement).value);
+      });
+    </script>
   </body>
 </html>
