@@ -1,6 +1,7 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
-import { buttonClass, cardClass, inputClass, labelClass } from "../../components/admin/ui";
+import Icon from "../../components/Icon.astro";
+import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../components/admin/ui";
 import { parseNewCenter } from "../../lib/admin/forms";
 import { guardSuperadmin } from "../../lib/auth/guard";
 import { createCenter, listCenters } from "../../lib/repo/centers";
@@ -14,37 +15,57 @@ if (Astro.request.method === 'POST') {
   if (!parsed.ok) return Astro.redirect(`/admin?error=${encodeURIComponent(parsed.error)}`, 303);
   const created = await createCenter(parsed.value);
   if (!created) return Astro.redirect(`/admin?error=${encodeURIComponent('Ya existe un centro con ese identificador')}`, 303);
-  return Astro.redirect(`/admin/centers/${created.slug}?ok=1`, 303);
+  return Astro.redirect(`/admin/centers/${created.slug}?ok=center-created`, 303);
 }
 
 const centers = await listCenters();
+const host = Astro.url.host;
 ---
 
-<AdminLayout title="Centros" actor={actor} active="centers">
-  <div class={`${cardClass} overflow-x-auto`}>
+<AdminLayout
+  title="Centros"
+  intro="Todos los centros de la plataforma. Desde aquí das de alta uno nuevo, ajustas su PayPal o entras en su panel."
+  actor={actor}
+  active="centers"
+>
+  <div class={cardClass}>
     {centers.length === 0 ? (
-      <p class="text-gray-500">Todavía no hay centros.</p>
+      <p class="text-base text-muted">Todavía no hay centros. Crea el primero con el formulario de más abajo.</p>
     ) : (
-      <table class="w-full text-left text-sm">
-        <thead class="text-xs uppercase text-gray-500">
+      <table class={tableClass}>
+        <thead>
           <tr>
-            <th class="py-2 pr-4">Centro</th>
-            <th class="py-2 pr-4">Dirección</th>
-            <th class="py-2 pr-4">PayPal</th>
-            <th class="py-2 pr-4">Estado</th>
-            <th class="py-2"></th>
+            <th class={thClass}>Centro</th>
+            <th class={thClass}>Su web</th>
+            <th class={thClass}>PayPal</th>
+            <th class={thClass}>Estado</th>
+            <th class={thClass}><span class="sr-only">Acciones</span></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody>
           {centers.map((center) => (
             <tr>
-              <td class="py-3 pr-4 font-medium text-gray-900">{center.name}</td>
-              <td class="py-3 pr-4"><a href={`/${center.slug}`} class="text-teal-700 hover:underline">/{center.slug}</a></td>
-              <td class="py-3 pr-4">{center.paypal_configured ? `Configurado (${center.paypal_env})` : 'Sin configurar'}</td>
-              <td class="py-3 pr-4">{center.status === 'active' ? 'Activo' : 'Desactivado'}</td>
-              <td class="py-3 text-right space-x-4">
-                <a href={`/admin/centers/${center.slug}`} class="text-teal-700 hover:underline">Ajustes</a>
-                <a href={`/${center.slug}/admin`} class="text-teal-700 hover:underline">Panel</a>
+              <td class={`${tdClass} font-semibold text-ink`} data-label="Centro">{center.name}</td>
+              <td class={tdClass} data-label="Su web">
+                <a href={`/${center.slug}`} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 font-semibold text-brand hover:underline">
+                  /{center.slug}
+                  <Icon name="arrow-up-right" class="h-4 w-4" />
+                  <span class="sr-only">(se abre en una pestaña nueva)</span>
+                </a>
+              </td>
+              <td class={tdClass} data-label="PayPal">
+                <span class={center.paypal_configured ? chipClass.ok : chipClass.warn}>
+                  {center.paypal_configured ? `Configurado (${center.paypal_env === 'live' ? 'real' : 'pruebas'})` : 'Sin configurar'}
+                </span>
+              </td>
+              <td class={tdClass} data-label="Estado">
+                <span class={center.status === 'active' ? chipClass.ok : chipClass.muted}>{center.status === 'active' ? 'Visible' : 'Desactivado'}</span>
+              </td>
+              <td class="py-2">
+                <div class="flex flex-wrap justify-end gap-2">
+                  <a href={`/${center.slug}/admin`} class={`${secondaryButtonClass} px-4!`}>Abrir panel<span class="sr-only"> de {center.name}</span></a>
+                  <a href={`/admin/centers/${center.slug}`} class={`${secondaryButtonClass} px-4!`}>Ajustes<span class="sr-only"> de {center.name}</span></a>
+                </div>
               </td>
             </tr>
           ))}
@@ -53,19 +74,21 @@ const centers = await listCenters();
     )}
   </div>
 
-  <form method="post" class={`${cardClass} space-y-4`}>
-    <h2 class="text-lg font-semibold text-gray-900">Nuevo centro</h2>
-    <div class="grid gap-4 sm:grid-cols-2">
+  <form method="post" class={`${cardClass} space-y-5`}>
+    <h2 class="text-xl font-bold text-ink">Dar de alta un centro nuevo</h2>
+    <div class="grid gap-5 sm:grid-cols-2">
       <div>
-        <label class={labelClass} for="slug">Identificador (URL)</label>
-        <input id="slug" name="slug" class={inputClass} maxlength="40" required />
-        <p class="mt-1 text-xs text-gray-500">Minúsculas, números y guiones. No se puede cambiar después.</p>
-      </div>
-      <div>
-        <label class={labelClass} for="name">Nombre</label>
+        <label class={labelClass} for="name">Nombre del centro</label>
         <input id="name" name="name" class={inputClass} maxlength="80" required />
       </div>
+      <div>
+        <label class={labelClass} for="slug">Dirección de su web</label>
+        <input id="slug" name="slug" class={inputClass} maxlength="40" placeholder="nombre-del-centro" required />
+        <p class={helpClass}>Su web será {host}/<strong>esto</strong>. Solo minúsculas, números y guiones. No se puede cambiar después.</p>
+      </div>
     </div>
-    <button type="submit" class={buttonClass}>Crear centro</button>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Crear centro</button>
+    </div>
   </form>
 </AdminLayout>

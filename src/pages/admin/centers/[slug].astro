@@ -1,6 +1,7 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { buttonClass, cardClass, inputClass, labelClass } from "../../../components/admin/ui";
+import Icon from "../../../components/Icon.astro";
+import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass, linkClass } from "../../../components/admin/ui";
 import { parseEmail, parsePaypal } from "../../../lib/admin/forms";
 import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
@@ -51,18 +52,24 @@ if (Astro.request.method === 'POST') {
 ---
 
 <AdminLayout title={`Ajustes de ${center.name}`} actor={actor} active="centers">
-  <p class="text-sm text-gray-600">
-    <a href="/admin" class="text-teal-700 hover:underline">← Todos los centros</a>
-    · <a href={`/${center.slug}/admin`} class="text-teal-700 hover:underline">Panel del centro</a>
-    · <a href={`/${center.slug}/admin/users`} class="text-teal-700 hover:underline">Encargados</a>
-  </p>
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+    <a href="/admin" class={`${linkClass} inline-flex items-center gap-1.5`}>
+      <Icon name="arrow-left" class="h-4 w-4" />
+      Todos los centros
+    </a>
+    <a href={`/${center.slug}/admin`} class={linkClass}>Abrir su panel</a>
+    <a href={`/${center.slug}/admin/users`} class={linkClass}>Encargados</a>
+  </div>
 
-  <form method="post" class={`${cardClass} space-y-4`}>
+  <form method="post" class={`${cardClass} space-y-5`}>
     <input type="hidden" name="intent" value="paypal" />
-    <h2 class="text-lg font-semibold text-gray-900">PayPal</h2>
-    <p class="text-sm text-gray-600">
-      Estado: {center.paypal_configured ? `configurado (${center.paypal_env})` : 'sin configurar'}. El secret nunca se muestra; déjalo en blanco para conservar el actual.
-    </p>
+    <div>
+      <h2 class="text-xl font-bold text-ink">PayPal</h2>
+      <p class="mt-1 text-base text-muted">
+        Con estos datos el centro recibe sus donaciones. Los copias de la aplicación del centro en developer.paypal.com.
+        Ahora mismo: <strong>{center.paypal_configured ? `configurado (${center.paypal_env === 'live' ? 'dinero real' : 'pruebas'})` : 'sin configurar'}</strong>.
+      </p>
+    </div>
     <div>
       <label class={labelClass} for="client_id">Client ID</label>
       <input id="client_id" name="client_id" class={inputClass} value={center.paypal_client_id ?? ''} autocomplete="off" required />
@@ -70,35 +77,50 @@ if (Astro.request.method === 'POST') {
     <div>
       <label class={labelClass} for="secret">Secret</label>
       <input id="secret" name="secret" type="password" class={inputClass} autocomplete="new-password" />
+      <p class={helpClass}>Nunca se muestra. Déjalo en blanco para conservar el actual; es obligatorio si cambias el Client ID o el entorno.</p>
     </div>
     <div>
       <label class={labelClass} for="env">Entorno</label>
       <select id="env" name="env" class={inputClass}>
-        <option value="sandbox" selected={center.paypal_env === 'sandbox'}>Sandbox (pruebas)</option>
-        <option value="live" selected={center.paypal_env === 'live'}>Live (dinero real)</option>
+        <option value="sandbox" selected={center.paypal_env === 'sandbox'}>Pruebas (sandbox): no se cobra dinero real</option>
+        <option value="live" selected={center.paypal_env === 'live'}>Real (live): cobra dinero de verdad</option>
       </select>
     </div>
-    <button type="submit" class={buttonClass}>Guardar PayPal</button>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Guardar PayPal</button>
+    </div>
   </form>
 
-  <form method="post" class={`${cardClass} space-y-4`}>
+  <form method="post" class={`${cardClass} space-y-5`}>
     <input type="hidden" name="intent" value="status" />
-    <h2 class="text-lg font-semibold text-gray-900">Visibilidad</h2>
-    <p class="text-sm text-gray-600">Un centro desactivado desaparece del listado, su web da 404 y no admite donaciones nuevas.</p>
-    <select name="status" class={inputClass}>
-      <option value="active" selected={center.status === 'active'}>Activo</option>
-      <option value="disabled" selected={center.status === 'disabled'}>Desactivado</option>
-    </select>
-    <button type="submit" class={buttonClass}>Guardar visibilidad</button>
+    <div>
+      <h2 class="text-xl font-bold text-ink">Visibilidad del centro</h2>
+      <p class="mt-1 text-base text-muted">Un centro desactivado desaparece del listado, su web da error 404 y no admite donaciones nuevas.</p>
+    </div>
+    <div>
+      <label class={labelClass} for="status">Estado</label>
+      <select id="status" name="status" class={inputClass}>
+        <option value="active" selected={center.status === 'active'}>Visible</option>
+        <option value="disabled" selected={center.status === 'disabled'}>Desactivado</option>
+      </select>
+    </div>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Guardar visibilidad</button>
+    </div>
   </form>
 
-  <form method="post" class={`${cardClass} space-y-4`}>
+  <form method="post" class={`${cardClass} space-y-5`}>
     <input type="hidden" name="intent" value="add_user" />
-    <h2 class="text-lg font-semibold text-gray-900">Añadir encargado</h2>
+    <div>
+      <h2 class="text-xl font-bold text-ink">Dar acceso a un encargado</h2>
+      <p class="mt-1 text-base text-muted">Podrá entrar al panel de este centro con la cuenta de Google de ese correo.</p>
+    </div>
     <div>
       <label class={labelClass} for="email">Correo de Google</label>
-      <input id="email" name="email" type="email" class={inputClass} required />
+      <input id="email" name="email" type="email" class={inputClass} placeholder="nombre@gmail.com" required />
     </div>
-    <button type="submit" class={buttonClass}>Añadir encargado</button>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Dar acceso</button>
+    </div>
   </form>
 </AdminLayout>
