@@ -23,7 +23,7 @@ const fail = (status: number, body: unknown) => ({ ok: false, status, json: asyn
 const completed = {
   status: 'COMPLETED',
   purchase_units: [
-    { payments: { captures: [{ id: 'CAP1', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' } }] } },
+    { payments: { captures: [{ id: 'CAP1', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' }, status: 'COMPLETED' }] } },
   ],
 };
 
@@ -61,6 +61,18 @@ describe('createOrder', () => {
     fetchMock.mockResolvedValueOnce(fail(401, {}));
     await expect(createOrder(creds, { amount: 1, description: 'd', itemId: 'i', brandName: 'b' })).rejects.toBeInstanceOf(PayPalError);
   });
+
+  it('asserts the Authorization header Basic on token call and Bearer on order call', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok({ id: 'ORDER-1' }));
+    await createOrder(creds, { amount: 1, description: 'd', itemId: 'i', brandName: 'b' });
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toMatch(/^Basic /);
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('throws when token response 200 without access_token', async () => {
+    fetchMock.mockResolvedValueOnce(ok({}));
+    await expect(createOrder(creds, { amount: 1, description: 'd', itemId: 'i', brandName: 'b' })).rejects.toBeInstanceOf(PayPalError);
+  });
 });
 
 describe('captureOrder', () => {
@@ -93,5 +105,36 @@ describe('captureOrder', () => {
     const broken = { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP1', amount: { value: '1', currency_code: 'EUR' } }] } }] };
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(broken));
     await expect(captureOrder(creds, 'ORDER-1')).rejects.toThrow('incomplete capture data');
+  });
+
+  it('rejects non-JSON failure body on capture call with PayPalError carrying status', async () => {
+    const jsonError = () => {
+      throw new SyntaxError('Invalid JSON');
+    };
+    const failResponse = { ok: false, status: 500, json: jsonError, text: async () => '' };
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(failResponse);
+    const error = await captureOrder(creds, 'ORDER-1').catch((e) => e);
+    expect(error).toBeInstanceOf(PayPalError);
+    expect(error.status).toBe(500);
+  });
+
+  it('returns the COMPLETED capture when multiple captures exist', async () => {
+    const multiCapture = {
+      status: 'COMPLETED',
+      purchase_units: [
+        {
+          payments: {
+            captures: [
+              { id: 'CAP1', custom_id: 'item-1', amount: { value: '5.00', currency_code: 'EUR' }, status: 'PENDING' },
+              { id: 'CAP2', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' }, status: 'COMPLETED' },
+            ],
+          },
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(multiCapture));
+    const result = await captureOrder(creds, 'ORDER-1');
+    expect(result.captureId).toBe('CAP2');
+    expect(result.amount).toBe('12.00');
   });
 });

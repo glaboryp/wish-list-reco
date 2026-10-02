@@ -36,6 +36,14 @@ export function credentialsFor(center: CenterWithSecret, encryptionKey: string):
   };
 }
 
+async function safeJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
 async function accessToken(credentials: PayPalCredentials): Promise<string> {
   const basic = Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`).toString('base64');
   const res = await fetch(`${apiBase(credentials.env)}/v1/oauth2/token`, {
@@ -43,9 +51,9 @@ async function accessToken(credentials: PayPalCredentials): Promise<string> {
     headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'client_credentials' }),
   });
-  if (!res.ok) throw new PayPalError('token request failed', res.status);
-  const { access_token } = await res.json();
-  return access_token;
+  const data = await safeJson(res);
+  if (!res.ok || !data.access_token) throw new PayPalError('token request failed', res.status);
+  return data.access_token;
 }
 
 export async function createOrder(
@@ -73,7 +81,7 @@ export async function createOrder(
       },
     }),
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok || !data.id) throw new PayPalError('order creation failed', res.status);
   return data.id;
 }
@@ -85,17 +93,18 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
 
   let data: any;
   const res = await fetch(`${base}/capture`, { method: 'POST', headers });
-  data = await res.json();
+  data = await safeJson(res);
   if (!res.ok) {
     const alreadyCaptured = data?.details?.some((d: any) => d.issue === 'ORDER_ALREADY_CAPTURED');
     if (!alreadyCaptured) throw new PayPalError('capture failed', res.status);
     const readBack = await fetch(base, { headers });
-    data = await readBack.json();
+    data = await safeJson(readBack);
     if (!readBack.ok) throw new PayPalError('order lookup failed', readBack.status);
   }
 
   if (data.status !== 'COMPLETED') throw new PayPalError(`order not completed: ${data.status}`);
-  const capture = data.purchase_units?.[0]?.payments?.captures?.[0];
+  const captures = data.purchase_units?.[0]?.payments?.captures ?? [];
+  const capture = captures.find((c: any) => c.status === 'COMPLETED') ?? captures[0];
   if (!capture?.id || !capture.amount?.value || !capture.custom_id) {
     throw new PayPalError('incomplete capture data');
   }
