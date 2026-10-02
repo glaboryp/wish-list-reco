@@ -15,7 +15,7 @@ export const onRequest = defineMiddleware(async (context: any, next: any) => {
     if (context.request.method === 'GET' || context.request.method === 'HEAD') {
         const legacyTarget = legacyRedirectTarget(new URL(context.request.url));
         if (legacyTarget) {
-            return new Response(null, { status: 307, headers: { Location: legacyTarget } });
+            return new Response(null, { status: 308, headers: { Location: legacyTarget } });
         }
     }
 
