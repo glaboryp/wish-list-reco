@@ -107,6 +107,6 @@ Center panel (`/<slug>/admin`):
 
 1. Unit tests (Vitest): encryption round-trip and tamper detection, `requireCenterAccess`, donation sums and derived funded state, slug validation, contrast validation.
 2. API tests: existing `create-order` and `capture-order` tests adapted to centers, including cross-center isolation, disabled center, and idempotent capture retry.
-3. E2E (Playwright): the donation flow against `/recoletos`, plus a login flow using the Firebase Auth emulator; a manager of one center cannot reach another center's admin.
+3. E2E (Playwright): the donation flow against `/recoletos`, plus access-control flows driven by session cookies minted with the test `SESSION_SECRET` (a manager of one center cannot reach another center's admin, anonymous and forged cookies go to `/login`, cross-origin writes are rejected). Google sign-in itself is verified manually against a real Firebase project.
 4. Migration rehearsal shows per-item totals identical before and after.
 5. `pnpm exec astro check`, `pnpm exec vitest run` and `pnpm run build` pass.
