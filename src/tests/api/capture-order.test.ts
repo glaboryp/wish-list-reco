@@ -89,4 +89,12 @@ describe('POST /api/[slug]/paypal/capture-order', () => {
     expect(response.status).toBe(500);
     expect((await response.json()).paymentId).toBe('CAP1');
   });
+
+  it('does not record a capture in a currency other than EUR', async () => {
+    captureOrder.mockResolvedValue({ ...capture, currency: 'JPY', amount: '1000' });
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ paymentId: 'CAP1', itemId: 'item-1', amount: '1000' });
+    expect(recordPaypalDonation).not.toHaveBeenCalled();
+  });
 });

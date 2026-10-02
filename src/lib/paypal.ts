@@ -104,7 +104,7 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
 
   if (data.status !== 'COMPLETED') throw new PayPalError(`order not completed: ${data.status}`);
   const captures = data.purchase_units?.[0]?.payments?.captures ?? [];
-  const capture = captures.find((c: any) => c.status === 'COMPLETED') ?? captures[0];
+  const capture = captures.find((c: any) => c.status === 'COMPLETED');
   if (!capture?.id || !capture.amount?.value || !capture.custom_id) {
     throw new PayPalError('incomplete capture data');
   }

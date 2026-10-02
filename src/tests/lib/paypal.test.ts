@@ -102,7 +102,7 @@ describe('captureOrder', () => {
   });
 
   it('throws when the capture lacks the item reference', async () => {
-    const broken = { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP1', amount: { value: '1', currency_code: 'EUR' } }] } }] };
+    const broken = { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP1', status: 'COMPLETED', amount: { value: '1', currency_code: 'EUR' } }] } }] };
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(broken));
     await expect(captureOrder(creds, 'ORDER-1')).rejects.toThrow('incomplete capture data');
   });
@@ -136,5 +136,14 @@ describe('captureOrder', () => {
     const result = await captureOrder(creds, 'ORDER-1');
     expect(result.captureId).toBe('CAP2');
     expect(result.amount).toBe('12.00');
+  });
+
+  it('throws when the order is completed but no capture is COMPLETED', async () => {
+    const pending = {
+      status: 'COMPLETED',
+      purchase_units: [{ payments: { captures: [{ id: 'CAP1', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' }, status: 'PENDING' }] } }],
+    };
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(pending));
+    await expect(captureOrder(creds, 'ORDER-1')).rejects.toThrow('incomplete capture data');
   });
 });

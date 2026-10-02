@@ -42,6 +42,11 @@ export const POST: APIRoute = async ({ params, request }) => {
     amount: capture.amount,
   };
 
+  if (capture.currency !== 'EUR') {
+    console.error('Captura PayPal en divisa no admitida, no registrada', failure, capture.currency);
+    return json(failure, 500);
+  }
+
   let outcome;
   try {
     outcome = await recordPaypalDonation({
