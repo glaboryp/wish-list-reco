@@ -59,7 +59,8 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
       </div>
       <div>
         <label class={labelClass} for="amount">Importe (€)</label>
-        <input id="amount" name="amount" class={inputClass} inputmode="decimal" placeholder="20,50" required />
+        <input id="amount" name="amount" class={inputClass} inputmode="decimal" required />
+        <p class={helpClass}>Por ejemplo: 20,50.</p>
       </div>
       <div>
         <label class={labelClass} for="note">Nota (opcional)</label>

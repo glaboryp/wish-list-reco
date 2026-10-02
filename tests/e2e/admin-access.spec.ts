@@ -23,6 +23,12 @@ test.describe('admin access control', () => {
         await expect(page.getByRole('button', { name: 'Entrar con Google' })).toBeVisible();
     });
 
+    test('the home page links to the login page', async ({ page }) => {
+        await page.goto('/');
+        await page.getByRole('link', { name: 'Acceso para encargados' }).click();
+        await expect(page).toHaveURL(/\/login$/);
+    });
+
     test('a forged cookie is rejected', async ({ page, context }) => {
         await context.addCookies([{ name: 'session', value: 'forged.value.here', url: ORIGIN }]);
         await page.goto('/recoletos/admin');

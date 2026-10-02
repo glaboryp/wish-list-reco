@@ -86,8 +86,8 @@ const statusChip = (status: string, raised: number, goal: number) => {
     <div class="grid gap-5 sm:grid-cols-3">
       <div>
         <label class={labelClass} for="goal">Precio del artículo (€)</label>
-        <input id="goal" name="goal" class={inputClass} inputmode="decimal" placeholder="120,50" required />
-        <p class={helpClass}>Lo que hay que reunir en total.</p>
+        <input id="goal" name="goal" class={inputClass} inputmode="decimal" required />
+        <p class={helpClass}>Lo que hay que reunir en total, por ejemplo 120,50.</p>
       </div>
       <div>
         <label class={labelClass} for="status">Visibilidad</label>
