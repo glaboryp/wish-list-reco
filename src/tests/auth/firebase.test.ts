@@ -58,4 +58,21 @@ describe('verifyFirebaseIdToken', () => {
     const foreign = await verifyFirebaseIdToken(await mint(), projectId, async () => other.publicKey).catch(() => 'rejected');
     expect(foreign).toBe('rejected');
   });
+
+  it('rejects a token signed with a different algorithm even if key resolves', async () => {
+    const es256Pair = await generateKeyPair('ES256');
+    const es256Token = await new SignJWT({
+      email: 'Ana@Example.org',
+      email_verified: true,
+      firebase: { sign_in_provider: 'google.com' },
+    })
+      .setProtectedHeader({ alg: 'ES256' })
+      .setSubject('uid-1')
+      .setIssuer(`https://securetoken.google.com/${projectId}`)
+      .setAudience(projectId)
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(es256Pair.privateKey);
+    await expect(verifyFirebaseIdToken(es256Token, projectId, async () => es256Pair.publicKey)).rejects.toThrow();
+  });
 });

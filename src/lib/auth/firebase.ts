@@ -21,6 +21,7 @@ export async function verifyFirebaseIdToken(
   keys: JWTVerifyGetKey = googleKeys,
 ): Promise<FirebaseIdentity> {
   const { payload } = await jwtVerify(idToken, keys, {
+    algorithms: ['RS256'],
     issuer: `https://securetoken.google.com/${projectId}`,
     audience: projectId,
   });
