@@ -2,7 +2,7 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, inputClass, labelClass } from "../../../components/admin/ui";
 import { parseEmail, parsePaypal } from "../../../lib/admin/forms";
-import { savePaypalSettings } from "../../../lib/admin/paypal-settings";
+import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
 import { getCenterBySlug, setCenterStatus } from "../../../lib/repo/centers";
 import { addCenterUser } from "../../../lib/repo/users";
@@ -24,8 +24,17 @@ if (Astro.request.method === 'POST') {
   if (intent === 'paypal') {
     const parsed = parsePaypal(form);
     if (!parsed.ok) return fail(parsed.error);
-    if (!center.paypal_configured && parsed.value.secret === null) return fail('Introduce el secret de PayPal');
-    await savePaypalSettings(center.id, parsed.value, import.meta.env.ENCRYPTION_KEY);
+    if (requiresNewSecret(center, parsed.value)) {
+      return fail(center.paypal_configured
+        ? 'Introduce el secret de PayPal al cambiar el Client ID o el entorno'
+        : 'Introduce el secret de PayPal');
+    }
+    try {
+      await savePaypalSettings(center.id, parsed.value, import.meta.env.ENCRYPTION_KEY);
+    } catch (err) {
+      console.error('PayPal settings save failed:', err instanceof Error ? err.message : 'unknown error');
+      return fail('No se pudo guardar el secret; revisa la configuración de cifrado');
+    }
   } else if (intent === 'status') {
     const status = form.get('status');
     if (status !== 'active' && status !== 'disabled') return fail('Estado no válido');
