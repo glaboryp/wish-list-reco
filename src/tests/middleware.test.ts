@@ -26,14 +26,14 @@ describe('middleware', () => {
         return new Response('ok');
       },
     );
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(308);
     expect(response.headers.get('Location')).toBe('https://wish-list-oratorio.vercel.app/recoletos');
     expect(reachedApp).toBe(false);
   });
 
   it('redirects HEAD requests on the legacy domain and keeps the path', async () => {
     const response = await run(new Request('https://wish-list-reco.vercel.app/item/abc?x=1', { method: 'HEAD' }));
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(308);
     expect(response.headers.get('Location')).toBe('https://wish-list-oratorio.vercel.app/item/abc?x=1');
   });
 
