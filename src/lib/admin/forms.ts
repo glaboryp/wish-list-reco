@@ -30,7 +30,7 @@ function parseMoney(raw: string): number | null {
 function blobField(form: FormData, name: string, slug: string): { ok: true; value: string | null } | { ok: false } {
   const raw = text(form, name);
   if (raw === '') return { ok: true, value: null };
-  return isCenterBlobUrl(raw, slug) ? { ok: true, value: raw } : { ok: false };
+  return isCenterBlobUrl(raw, slug) ? { ok: true, value: new URL(raw).href } : { ok: false };
 }
 
 export function parseEmail(raw: unknown): Parsed<string> {

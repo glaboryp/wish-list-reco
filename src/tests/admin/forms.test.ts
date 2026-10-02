@@ -56,6 +56,11 @@ describe('parseAppearance', () => {
     expect(result.ok && result.value.heroImageUrl).toBe(BLOB);
   });
 
+  it('canonicalizes a URL with spaces in hero image', () => {
+    const result = parseAppearance(form({ ...valid, hero_image_url: 'https://abc.public.blob.vercel-storage.com/recoletos/a b.webp' }), 'recoletos');
+    expect(result.ok && result.value.heroImageUrl).toBe('https://abc.public.blob.vercel-storage.com/recoletos/a%20b.webp');
+  });
+
   it.each([
     ['empty name', { name: ' ' }],
     ['long name', { name: 'x'.repeat(81) }],
@@ -82,6 +87,11 @@ describe('parseItem', () => {
   it('defaults the sort order to 0', () => {
     const result = parseItem(form({ ...valid, sort_order: '' }), 'recoletos');
     expect(result.ok && result.value.sortOrder).toBe(0);
+  });
+
+  it('canonicalizes a URL with special characters in image', () => {
+    const result = parseItem(form({ ...valid, image_url: 'https://abc.public.blob.vercel-storage.com/recoletos/a"b.webp' }), 'recoletos');
+    expect(result.ok && result.value.imageUrl).toBe('https://abc.public.blob.vercel-storage.com/recoletos/a%22b.webp');
   });
 
   it.each([
