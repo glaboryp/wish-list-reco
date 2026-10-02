@@ -98,7 +98,7 @@ async function setMainImage(centerId: string, itemId: string, url: string, alt: 
 export async function createItem(centerId: string, input: ItemInput): Promise<string> {
   const rows = await sql`
     INSERT INTO items (center_id, name, description, goal_amount, status, sort_order)
-    VALUES (${centerId}, ${input.name}, ${input.description}, ${input.goal}, ${input.status}, ${input.sortOrder})
+    VALUES (${centerId}, ${input.name}, ${input.description}, ${input.goal}, ${input.status === 'archived' ? 'draft' : input.status}, ${input.sortOrder})
     RETURNING id
   `;
   const id = rows[0].id as string;
@@ -112,7 +112,7 @@ export async function updateItem(centerId: string, itemId: string, input: ItemIn
       name = ${input.name},
       description = ${input.description},
       goal_amount = ${input.goal},
-      status = ${input.status},
+      status = CASE WHEN ${input.status}::item_status = 'archived' AND items.status <> 'archived' THEN items.status ELSE ${input.status}::item_status END,
       sort_order = ${input.sortOrder},
       updated_at = NOW()
     WHERE id = ${itemId} AND center_id = ${centerId}

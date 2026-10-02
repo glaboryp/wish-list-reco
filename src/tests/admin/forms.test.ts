@@ -102,8 +102,8 @@ describe('parseItem', () => {
     ['three decimals', { goal: '10.123' }],
     ['text goal', { goal: 'mucho' }],
     ['goal over one million', { goal: '10000000' }],
-    ['archived status', { status: 'archived' }],
-    ['unknown status', { status: 'funded' }],
+    ['funded status', { status: 'funded' }],
+    ['bogus status', { status: 'bogus' }],
     ['fractional sort order', { sort_order: '1.5' }],
     ['foreign image', { image_url: 'https://evil.example.com/a.png' }],
   ])('rejects %s', (_label, override) => {

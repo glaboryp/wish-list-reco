@@ -43,7 +43,7 @@ if (Astro.request.method === 'POST') {
 
   {item.status === 'archived' && (
     <p class="rounded-lg bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-      Este artículo está archivado. Guárdalo con estado "Activo" para volver a mostrarlo.
+      Este artículo está archivado y no se muestra. Para volver a mostrarlo, elige el estado "Activo" y guarda (si guardas con "Archivado" seguirá oculto).
     </p>
   )}
 
@@ -64,8 +64,9 @@ if (Astro.request.method === 'POST') {
       <div>
         <label class={labelClass} for="status">Estado</label>
         <select id="status" name="status" class={inputClass}>
-          <option value="active" selected={item.status === 'active' || item.status === 'funded' || item.status === 'archived'}>Activo (visible)</option>
+          <option value="active" selected={item.status === 'active' || item.status === 'funded'}>Activo (visible)</option>
           <option value="draft" selected={item.status === 'draft'}>Borrador (oculto)</option>
+          {item.status === 'archived' && <option value="archived" selected>Archivado (oculto)</option>}
         </select>
       </div>
       <div>

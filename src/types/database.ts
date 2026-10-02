@@ -78,7 +78,7 @@ export interface ItemInput {
   name: string;
   description: string;
   goal: number;
-  status: 'draft' | 'active';
+  status: 'draft' | 'active' | 'archived';
   sortOrder: number;
   imageUrl: string | null;
   imageAlt: string | null;

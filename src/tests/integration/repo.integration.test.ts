@@ -96,6 +96,26 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect((await getAdminItem(centerA, id))?.imageUrl).toBe('https://x.public.blob.vercel-storage.com/a.png');
   });
 
+  it('keeps archived items archived unless explicitly reactivated', async () => {
+    const id = await createItem(centerA, itemInput);
+    await sql`UPDATE items SET status = 'archived' WHERE id = ${id}`;
+    expect(await updateItem(centerA, id, { ...itemInput, name: 'typo', status: 'archived' })).toBe(true);
+    expect(await getAdminItem(centerA, id)).toMatchObject({ status: 'archived', name: 'typo' });
+    expect(await updateItem(centerA, id, { ...itemInput, status: 'active' })).toBe(true);
+    expect((await getAdminItem(centerA, id))?.status).toBe('active');
+  });
+
+  it('does not archive an active item through the form', async () => {
+    const id = await createItem(centerA, itemInput);
+    expect(await updateItem(centerA, id, { ...itemInput, status: 'archived' })).toBe(true);
+    expect((await getAdminItem(centerA, id))?.status).toBe('active');
+  });
+
+  it('creates an item requested as archived as a draft', async () => {
+    const id = await createItem(centerA, { ...itemInput, status: 'archived' });
+    expect((await getAdminItem(centerA, id))?.status).toBe('draft');
+  });
+
   it('protects the last manager', async () => {
     expect(await addCenterUser(centerA, 'one@example.org')).toBe(true);
     expect(await addCenterUser(centerA, 'one@example.org')).toBe(false);

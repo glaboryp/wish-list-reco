@@ -77,7 +77,7 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
   if (goal === null) return fail('El precio debe ser un importe positivo con hasta 2 decimales');
 
   const status = text(form, 'status');
-  if (status !== 'draft' && status !== 'active') return fail('El estado no es válido');
+  if (status !== 'draft' && status !== 'active' && status !== 'archived') return fail('El estado no es válido');
 
   const sortRaw = text(form, 'sort_order');
   if (sortRaw !== '' && !INTEGER_PATTERN.test(sortRaw)) return fail('El orden debe ser un número entero');
