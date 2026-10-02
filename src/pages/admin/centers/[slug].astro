@@ -1,0 +1,95 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { buttonClass, cardClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { parseEmail, parsePaypal } from "../../../lib/admin/forms";
+import { savePaypalSettings } from "../../../lib/admin/paypal-settings";
+import { guardSuperadmin } from "../../../lib/auth/guard";
+import { getCenterBySlug, setCenterStatus } from "../../../lib/repo/centers";
+import { addCenterUser } from "../../../lib/repo/users";
+
+const guard = await guardSuperadmin(Astro);
+if (guard instanceof Response) return guard;
+const { actor } = guard;
+
+const center = await getCenterBySlug(Astro.params.slug ?? '');
+if (!center) return new Response('Centro no encontrado', { status: 404 });
+
+const here = `/admin/centers/${center.slug}`;
+const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const intent = form.get('intent');
+
+  if (intent === 'paypal') {
+    const parsed = parsePaypal(form);
+    if (!parsed.ok) return fail(parsed.error);
+    if (!center.paypal_configured && parsed.value.secret === null) return fail('Introduce el secret de PayPal');
+    await savePaypalSettings(center.id, parsed.value, import.meta.env.ENCRYPTION_KEY);
+  } else if (intent === 'status') {
+    const status = form.get('status');
+    if (status !== 'active' && status !== 'disabled') return fail('Estado no válido');
+    await setCenterStatus(center.id, status);
+  } else if (intent === 'add_user') {
+    const parsed = parseEmail(form.get('email'));
+    if (!parsed.ok) return fail(parsed.error);
+    await addCenterUser(center.id, parsed.value);
+  } else {
+    return fail('Acción no válida');
+  }
+  return Astro.redirect(`${here}?ok=1`, 303);
+}
+---
+
+<AdminLayout title={`Ajustes de ${center.name}`} actor={actor} active="centers">
+  <p class="text-sm text-gray-600">
+    <a href="/admin" class="text-teal-700 hover:underline">← Todos los centros</a>
+    · <a href={`/${center.slug}/admin`} class="text-teal-700 hover:underline">Panel del centro</a>
+    · <a href={`/${center.slug}/admin/users`} class="text-teal-700 hover:underline">Encargados</a>
+  </p>
+
+  <form method="post" class={`${cardClass} space-y-4`}>
+    <input type="hidden" name="intent" value="paypal" />
+    <h2 class="text-lg font-semibold text-gray-900">PayPal</h2>
+    <p class="text-sm text-gray-600">
+      Estado: {center.paypal_configured ? `configurado (${center.paypal_env})` : 'sin configurar'}. El secret nunca se muestra; déjalo en blanco para conservar el actual.
+    </p>
+    <div>
+      <label class={labelClass} for="client_id">Client ID</label>
+      <input id="client_id" name="client_id" class={inputClass} value={center.paypal_client_id ?? ''} autocomplete="off" required />
+    </div>
+    <div>
+      <label class={labelClass} for="secret">Secret</label>
+      <input id="secret" name="secret" type="password" class={inputClass} autocomplete="new-password" />
+    </div>
+    <div>
+      <label class={labelClass} for="env">Entorno</label>
+      <select id="env" name="env" class={inputClass}>
+        <option value="sandbox" selected={center.paypal_env === 'sandbox'}>Sandbox (pruebas)</option>
+        <option value="live" selected={center.paypal_env === 'live'}>Live (dinero real)</option>
+      </select>
+    </div>
+    <button type="submit" class={buttonClass}>Guardar PayPal</button>
+  </form>
+
+  <form method="post" class={`${cardClass} space-y-4`}>
+    <input type="hidden" name="intent" value="status" />
+    <h2 class="text-lg font-semibold text-gray-900">Visibilidad</h2>
+    <p class="text-sm text-gray-600">Un centro desactivado desaparece del listado, su web da 404 y no admite donaciones nuevas.</p>
+    <select name="status" class={inputClass}>
+      <option value="active" selected={center.status === 'active'}>Activo</option>
+      <option value="disabled" selected={center.status === 'disabled'}>Desactivado</option>
+    </select>
+    <button type="submit" class={buttonClass}>Guardar visibilidad</button>
+  </form>
+
+  <form method="post" class={`${cardClass} space-y-4`}>
+    <input type="hidden" name="intent" value="add_user" />
+    <h2 class="text-lg font-semibold text-gray-900">Añadir encargado</h2>
+    <div>
+      <label class={labelClass} for="email">Correo de Google</label>
+      <input id="email" name="email" type="email" class={inputClass} required />
+    </div>
+    <button type="submit" class={buttonClass}>Añadir encargado</button>
+  </form>
+</AdminLayout>
