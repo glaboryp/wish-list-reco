@@ -35,13 +35,13 @@ Copia `.env.example` a `.env` y rellénalo:
 
 ```bash
 pnpm install
-node scripts/migrate.mjs      # aplica las migraciones a POSTGRES_URL
+node --env-file=.env scripts/migrate.mjs      # aplica las migraciones a POSTGRES_URL
 pnpm dev                      # http://localhost:4321
 ```
 
 ## Migraciones
 
-Los archivos SQL están en `db/migrations/` y se aplican en orden con `node scripts/migrate.mjs` (se registran en `schema_migrations`). Prueba siempre antes en una rama de Neon.
+Los archivos SQL están en `db/migrations/` y se aplican en orden con `node --env-file=.env scripts/migrate.mjs` (se registran en `schema_migrations`). Prueba siempre antes en una rama de Neon.
 
 ## Tests
 
