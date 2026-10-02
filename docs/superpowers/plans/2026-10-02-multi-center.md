@@ -5166,13 +5166,13 @@ Copia `.env.example` a `.env` y rellénalo:
 
 ```bash
 pnpm install
-node scripts/migrate.mjs      # aplica las migraciones a POSTGRES_URL
+node --env-file=.env scripts/migrate.mjs      # aplica las migraciones a POSTGRES_URL
 pnpm dev                      # http://localhost:4321
 ```
 
 ## Migraciones
 
-Los archivos SQL están en `db/migrations/` y se aplican en orden con `node scripts/migrate.mjs` (se registran en `schema_migrations`). Prueba siempre antes en una rama de Neon.
+Los archivos SQL están en `db/migrations/` y se aplican en orden con `node --env-file=.env scripts/migrate.mjs` (se registran en `schema_migrations`). Prueba siempre antes en una rama de Neon.
 
 ## Tests
 
@@ -5238,13 +5238,19 @@ Push the branch (with Gloria's approval), let Vercel build a preview with its `P
 3. Add a second Google account as manager of `prueba`; sign in with it: it reaches `/prueba/admin` and gets 403 on `/recoletos/admin` and `/admin`.
 4. Try to remove the only manager as that manager: the page says the last manager cannot be removed.
 5. In `/admin/centers/recoletos`, enter the Recoletos sandbox PayPal Client ID and Secret (`sandbox`), then make a sandbox donation on `/recoletos`; the donation appears in `/recoletos/admin/donations` and the progress updates. Repeat the capture request (browser retry) and confirm it is not counted twice.
+6. Sign in with Google on the preview under the real CSP (no CSP violations in the console).
+7. Delete an item that has an image, and run `\d item_images` on the rehearsal branch to confirm the foreign key and the cascade behave as expected.
 
 - [ ] **Step 5: Production cut-over (short window; pick a quiet moment)**
 
-1. Merge the PR (Gloria's call) but hold the production deployment if Vercel auto-promotes, or merge and run step 2 immediately — the window between migration and deploy should be minutes.
-2. Run `POSTGRES_URL='<production url>' node scripts/migrate.mjs`, then verify totals as in Step 3 (`before` must be captured **before** migrating: run the `before` snapshot first).
-3. As soon as the new deployment is live, open `/admin/centers/recoletos` and enter the live PayPal Client ID and Secret with environment `live` (same credentials that are currently in `PAYPAL_CLIENT_ID` / `PAYPAL_APP_SECRET`). Until this is saved, donations on `/recoletos` answer "Este centro todavía no acepta donaciones".
-4. Make one small real donation and confirm it appears in the ledger and in PayPal.
+Deploy before migrating: while the schema is missing the new `capture-order` fails before capturing anything and Recoletos answers 503 until its credentials are entered, whereas the old code running after the migration could capture a PayPal payment and then fail its `UPDATE` of the dropped `raised_amount` column (paid but unrecorded).
+
+1. Take the `before` snapshot: `POSTGRES_URL='<production url>' node scripts/snapshot-totals.mjs before > "$TMPDIR/before.json"`.
+2. Merge the PR (Gloria's call) and deploy the new code: promote the production deployment in Vercel.
+3. IMMEDIATELY run `POSTGRES_URL='<production url>' node --env-file=.env scripts/migrate.mjs` against production (or export `POSTGRES_URL` and run `node scripts/migrate.mjs`); keep the window between steps 2 and 3 to minutes.
+4. Take the `after` snapshot and diff it against `before` as in Step 3 (`TOTALS IDENTICAL`).
+5. Open `/admin/centers/recoletos` and enter the live PayPal Client ID and Secret with environment `live` (same credentials that are currently in `PAYPAL_CLIENT_ID` / `PAYPAL_APP_SECRET`). Until this is saved, donations on `/recoletos` answer "Este centro todavía no acepta donaciones".
+6. Make one small real donation and confirm it appears in the ledger and in PayPal.
 
 - [ ] **Step 6: Clean up**
 
