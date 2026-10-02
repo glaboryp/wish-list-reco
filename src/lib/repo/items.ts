@@ -119,7 +119,15 @@ export async function updateItem(centerId: string, itemId: string, input: ItemIn
     RETURNING id
   `;
   if (rows.length === 0) return false;
-  if (input.imageUrl) await setMainImage(centerId, itemId, input.imageUrl, input.imageAlt);
+  if (input.imageUrl) {
+    await setMainImage(centerId, itemId, input.imageUrl, input.imageAlt);
+  } else {
+    await sql`
+      UPDATE item_images SET alt_text = ${input.imageAlt}
+      WHERE item_id = ${itemId} AND sort_order = 0
+        AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
+    `;
+  }
   return true;
 }
 

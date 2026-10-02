@@ -87,6 +87,15 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await removeOrArchiveItem(centerA, fresh)).toBe('deleted');
   });
 
+  it('saves alt text edited without a new image', async () => {
+    const id = await createItem(centerA, { ...itemInput, imageUrl: 'https://x.public.blob.vercel-storage.com/a.png', imageAlt: 'antes' });
+    expect(await updateItem(centerA, id, { ...itemInput, imageAlt: 'despues' })).toBe(true);
+    expect((await getAdminItem(centerA, id))?.imageAlt).toBe('despues');
+    expect(await updateItem(centerA, id, { ...itemInput, imageAlt: null })).toBe(true);
+    expect((await getAdminItem(centerA, id))?.imageAlt).toBeNull();
+    expect((await getAdminItem(centerA, id))?.imageUrl).toBe('https://x.public.blob.vercel-storage.com/a.png');
+  });
+
   it('protects the last manager', async () => {
     expect(await addCenterUser(centerA, 'one@example.org')).toBe(true);
     expect(await addCenterUser(centerA, 'one@example.org')).toBe(false);
