@@ -75,12 +75,12 @@ describe('parseAppearance', () => {
 });
 
 describe('parseItem', () => {
-  const valid = { name: 'Cáliz', description: 'Dorado', goal: '120,50', status: 'active', sort_order: '2', image_url: '', image_alt: '' };
+  const valid = { name: 'Cáliz', description: 'Dorado', goal: '120,50', status: 'active', sort_order: '2', image_url: '' };
 
   it('accepts a valid item and reads a comma decimal', () => {
     expect(parseItem(form(valid), 'recoletos')).toEqual({
       ok: true,
-      value: { name: 'Cáliz', description: 'Dorado', goal: 120.5, status: 'active', sortOrder: 2, imageUrl: null, imageAlt: null },
+      value: { name: 'Cáliz', description: 'Dorado', goal: 120.5, status: 'active', sortOrder: 2, imageUrl: null },
     });
   });
 

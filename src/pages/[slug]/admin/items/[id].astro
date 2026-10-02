@@ -1,7 +1,9 @@
 ---
 import AdminLayout from "../../../../layouts/AdminLayout.astro";
 import ImageUpload from "../../../../components/admin/ImageUpload.astro";
-import { buttonClass, cardClass, dangerButtonClass, inputClass, labelClass } from "../../../../components/admin/ui";
+import { buttonClass, cardClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, linkClass } from "../../../../components/admin/ui";
+import Icon from "../../../../components/Icon.astro";
+import { formatEuro } from "../../../../lib/format";
 import { parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { isUuid } from "../../../../lib/ids";
@@ -25,70 +27,86 @@ if (Astro.request.method === 'POST') {
   if (form.get('intent') === 'remove') {
     const outcome = await removeOrArchiveItem(center.id, item.id);
     const message = outcome === 'archived' ? 'El artículo tiene donaciones, se ha archivado en lugar de borrarlo' : '';
-    return Astro.redirect(message ? `${listUrl}?error=${encodeURIComponent(message)}` : `${listUrl}?ok=1`, 303);
+    return Astro.redirect(message ? `${listUrl}?error=${encodeURIComponent(message)}` : `${listUrl}?ok=item-removed`, 303);
   }
 
   const parsed = parseItem(form, center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await updateItem(center.id, item.id, parsed.value);
-  return Astro.redirect(`${here}?ok=1`, 303);
+  return Astro.redirect(`${here}?ok=item-saved`, 303);
 }
 ---
 
 <AdminLayout title={item.name} actor={actor} center={center} active="items">
-  <p class="text-sm text-gray-600">
-    <a href={listUrl} class="text-teal-700 hover:underline">← Volver a los artículos</a>
-    · Recaudado {item.raised.toFixed(2)} € de {item.goal.toFixed(2)} € · {item.donationCount} donaciones
-  </p>
+  <div class="space-y-1">
+    <a href={listUrl} class={`${linkClass} inline-flex items-center gap-1.5`}>
+      <Icon name="arrow-left" class="h-4 w-4" />
+      Volver a los artículos
+    </a>
+    <p class="tabular text-base text-muted">
+      Recaudado {formatEuro(item.raised)} de {formatEuro(item.goal)} · {item.donationCount} {item.donationCount === 1 ? 'donación' : 'donaciones'}
+    </p>
+  </div>
 
   {item.status === 'archived' && (
-    <p class="rounded-lg bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-      Este artículo está archivado y no se muestra. Para volver a mostrarlo, elige el estado "Activo" y guarda (si guardas con "Archivado" seguirá oculto).
-    </p>
+    <div role="status" class="flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-base text-amber-900 ring-1 ring-amber-200">
+      <Icon name="warning-circle" class="mt-0.5 h-5 w-5 shrink-0" />
+      <p>
+        Este artículo está archivado y no se ve en tu web. Para volver a mostrarlo, elige «Visible en la web» y guarda.
+      </p>
+    </div>
   )}
 
-  <form method="post" class={`${cardClass} space-y-4`}>
+  <form method="post" class={`${cardClass} space-y-5`}>
     <div>
-      <label class={labelClass} for="name">Nombre</label>
+      <label class={labelClass} for="name">Nombre del artículo</label>
       <input id="name" name="name" class={inputClass} value={item.name} maxlength="120" required />
     </div>
     <div>
       <label class={labelClass} for="description">Descripción</label>
       <textarea id="description" name="description" class={inputClass} rows="4" maxlength="2000">{item.description}</textarea>
+      <p class={helpClass}>Explica para qué sirve y por qué lo necesita el centro.</p>
     </div>
-    <div class="grid gap-4 sm:grid-cols-3">
+    <div class="grid gap-5 sm:grid-cols-3">
       <div>
-        <label class={labelClass} for="goal">Precio (€)</label>
-        <input id="goal" name="goal" class={inputClass} inputmode="decimal" value={item.goal.toFixed(2)} required />
+        <label class={labelClass} for="goal">Precio del artículo (€)</label>
+        <input id="goal" name="goal" class={inputClass} inputmode="decimal" value={item.goal.toFixed(2).replace('.', ',')} required />
+        <p class={helpClass}>Lo que hay que reunir en total.</p>
       </div>
       <div>
-        <label class={labelClass} for="status">Estado</label>
+        <label class={labelClass} for="status">Visibilidad</label>
         <select id="status" name="status" class={inputClass}>
-          <option value="active" selected={item.status === 'active' || item.status === 'funded'}>Activo (visible)</option>
-          <option value="draft" selected={item.status === 'draft'}>Borrador (oculto)</option>
+          <option value="active" selected={item.status === 'active' || item.status === 'funded'}>Visible en la web</option>
+          <option value="draft" selected={item.status === 'draft'}>Oculto (aún no se ve)</option>
           {item.status === 'archived' && <option value="archived" selected>Archivado (oculto)</option>}
         </select>
       </div>
       <div>
-        <label class={labelClass} for="sort_order">Orden</label>
+        <label class={labelClass} for="sort_order">Posición en la lista</label>
         <input id="sort_order" name="sort_order" class={inputClass} inputmode="numeric" value={String(item.sortOrder)} />
+        <p class={helpClass}>El número más bajo sale primero.</p>
       </div>
     </div>
-    <ImageUpload slug={center.slug} name="image_url" label="Cambiar imagen" current={item.imageUrl} />
-    <div>
-      <label class={labelClass} for="image_alt">Texto alternativo de la imagen</label>
-      <input id="image_alt" name="image_alt" class={inputClass} value={item.imageAlt ?? ''} maxlength="200" />
+    <ImageUpload slug={center.slug} name="image_url" label="Imagen del artículo" help="Se muestra en la lista y en la ficha del artículo." current={item.imageUrl} />
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Guardar cambios</button>
     </div>
-    <button type="submit" class={buttonClass}>Guardar cambios</button>
   </form>
 
-  <form method="post" class={`${cardClass} flex items-center justify-between gap-4`}>
+  <form
+    method="post"
+    class={`${cardClass} flex flex-wrap items-center justify-between gap-4`}
+    onsubmit={`return confirm('${item.donationCount > 0 ? '¿Archivar este artículo? Dejará de verse en tu web.' : '¿Borrar este artículo para siempre?'}')`}
+  >
     <input type="hidden" name="intent" value="remove" />
-    <p class="text-sm text-gray-600">
-      {item.donationCount > 0
-        ? 'Este artículo tiene donaciones: se archivará para conservar el registro.'
-        : 'Este artículo no tiene donaciones: se borrará definitivamente.'}
-    </p>
-    <button type="submit" class={dangerButtonClass}>{item.donationCount > 0 ? 'Archivar' : 'Borrar'}</button>
+    <div class="max-w-xl">
+      <h2 class="text-lg font-bold text-ink">{item.donationCount > 0 ? 'Archivar este artículo' : 'Borrar este artículo'}</h2>
+      <p class="mt-1 text-base text-muted">
+        {item.donationCount > 0
+          ? 'Este artículo tiene donaciones, así que no se borra: se archiva y deja de verse en tu web, y el registro de lo recaudado se conserva.'
+          : 'Este artículo no tiene donaciones, así que se borrará para siempre.'}
+      </p>
+    </div>
+    <button type="submit" class={dangerButtonClass}>{item.donationCount > 0 ? 'Archivar artículo' : 'Borrar artículo'}</button>
   </form>
 </AdminLayout>

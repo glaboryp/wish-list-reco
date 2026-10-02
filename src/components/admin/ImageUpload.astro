@@ -1,23 +1,38 @@
 ---
-import { labelClass } from "./ui";
+import Icon from "../Icon.astro";
+import { helpClass, labelClass, secondaryButtonClass } from "./ui";
 
 interface Props {
   slug: string;
   name: string;
   label: string;
+  help?: string;
   current?: string | null;
 }
 
-const { slug, name, label, current = null } = Astro.props;
+const { slug, name, label, help, current = null } = Astro.props;
 const inputId = `upload-${name}`;
 ---
 
-<div class="space-y-2" data-upload data-slug={slug}>
-  <label class={labelClass} for={inputId}>{label}</label>
-  {current && <img src={current} alt="" class="h-24 rounded border border-gray-200 object-cover" />}
-  <input id={inputId} type="file" accept="image/webp,image/jpeg,image/png" class="block text-sm" />
+<div data-upload data-slug={slug}>
+  <p class={labelClass} id={`${inputId}-label`}>{label}</p>
+  {help && <p class={`${helpClass} -mt-1 mb-3`}>{help}</p>}
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="flex h-24 w-36 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface text-muted">
+      <img data-preview src={current ?? undefined} alt="" class:list={['h-full w-full object-cover', !current && 'hidden']} />
+      <span data-placeholder class:list={[current && 'hidden']}><Icon name="image-square" class="h-8 w-8" /></span>
+    </div>
+    <div class="space-y-2">
+      <label class={`${secondaryButtonClass} cursor-pointer focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2`}>
+        <Icon name="upload-simple" class="h-5 w-5" />
+        <span data-button-text>{current ? 'Cambiar imagen' : 'Elegir imagen'}</span>
+        <input id={inputId} type="file" accept="image/webp,image/jpeg,image/png" class="sr-only" aria-labelledby={`${inputId}-label`} />
+      </label>
+      <p class="text-sm text-muted">Formatos JPG, PNG o WebP. Máximo 5 MB.</p>
+      <p class="text-sm font-semibold" data-status role="status" hidden></p>
+    </div>
+  </div>
   <input type="hidden" name={name} value="" />
-  <p class="text-xs text-gray-600" data-status hidden></p>
 </div>
 
 <script>
@@ -27,16 +42,27 @@ const inputId = `upload-${name}`;
     const file = root.querySelector<HTMLInputElement>('input[type="file"]')!;
     const hidden = root.querySelector<HTMLInputElement>('input[type="hidden"]')!;
     const status = root.querySelector<HTMLElement>('[data-status]')!;
+    const preview = root.querySelector<HTMLImageElement>('[data-preview]')!;
+    const placeholder = root.querySelector<HTMLElement>('[data-placeholder]')!;
+    const buttonText = root.querySelector<HTMLElement>('[data-button-text]')!;
     const slug = root.dataset.slug!;
     const submitButtons = () =>
       Array.from(file.form?.querySelectorAll<HTMLButtonElement>('button[type="submit"]') ?? []);
+
+    const show = (message: string, tone: 'info' | 'ok' | 'error') => {
+      status.hidden = false;
+      status.textContent = message;
+      status.className = `text-sm font-semibold ${tone === 'error' ? 'text-red-800' : tone === 'ok' ? 'text-green-800' : 'text-muted'}`;
+    };
 
     file.addEventListener('change', async () => {
       const selected = file.files?.[0];
       if (!selected) return;
 
-      status.hidden = false;
-      status.textContent = 'Subiendo imagen...';
+      preview.src = URL.createObjectURL(selected);
+      preview.classList.remove('hidden');
+      placeholder.classList.add('hidden');
+      show('Subiendo imagen...', 'info');
       submitButtons().forEach((button) => (button.disabled = true));
 
       try {
@@ -46,10 +72,11 @@ const inputId = `upload-${name}`;
           handleUploadUrl: `/api/${slug}/upload`,
         });
         hidden.value = blob.url;
-        status.textContent = 'Imagen subida. Guarda los cambios para aplicarla.';
+        buttonText.textContent = 'Cambiar imagen';
+        show('Imagen lista. Pulsa el botón de guardar para aplicarla.', 'ok');
       } catch {
         hidden.value = '';
-        status.textContent = 'No se pudo subir la imagen (webp, jpg o png, máximo 5 MB).';
+        show('No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
         submitButtons().forEach((button) => (button.disabled = false));
       }

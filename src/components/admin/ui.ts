@@ -20,6 +20,7 @@ export const chipClass = {
   muted: `${chip} bg-gray-100 text-gray-700`,
 };
 
-export const tableClass = 'w-full text-left text-base';
+export const tableClass = 'stack-table w-full text-left text-base';
 export const thClass = 'py-2 pr-4 text-sm font-semibold text-muted';
 export const tdClass = 'py-3.5 pr-4 align-middle';
+export const rowDividerClass = 'divide-y divide-line';

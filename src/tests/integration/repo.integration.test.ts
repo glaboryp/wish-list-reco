@@ -25,7 +25,6 @@ const itemInput = {
   status: 'active' as const,
   sortOrder: 0,
   imageUrl: null,
-  imageAlt: null,
 };
 
 describe.skipIf(!databaseUrl)('repositories against a real database', () => {
@@ -87,12 +86,9 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await removeOrArchiveItem(centerA, fresh)).toBe('deleted');
   });
 
-  it('saves alt text edited without a new image', async () => {
-    const id = await createItem(centerA, { ...itemInput, imageUrl: 'https://x.public.blob.vercel-storage.com/a.png', imageAlt: 'antes' });
-    expect(await updateItem(centerA, id, { ...itemInput, imageAlt: 'despues' })).toBe(true);
-    expect((await getAdminItem(centerA, id))?.imageAlt).toBe('despues');
-    expect(await updateItem(centerA, id, { ...itemInput, imageAlt: null })).toBe(true);
-    expect((await getAdminItem(centerA, id))?.imageAlt).toBeNull();
+  it('keeps the current image when an item is saved without a new one', async () => {
+    const id = await createItem(centerA, { ...itemInput, imageUrl: 'https://x.public.blob.vercel-storage.com/a.png' });
+    expect(await updateItem(centerA, id, { ...itemInput, name: 'Nuevo nombre' })).toBe(true);
     expect((await getAdminItem(centerA, id))?.imageUrl).toBe('https://x.public.blob.vercel-storage.com/a.png');
   });
 
