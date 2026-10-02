@@ -23,8 +23,13 @@ export default defineConfig({
         reuseExistingServer: !process.env.CI,
         env: {
             MOCK_DB: 'true',
-            POSTGRES_URL: 'postgresql://user:password@host.com/dbname', // Dummy URL to satisfy neon check
-            PUBLIC_PAYPAL_CLIENT_ID: 'test', // Dummy id; the SDK request is stubbed in the E2E test
+            POSTGRES_URL: 'postgresql://user:password@host.com/dbname',
+            ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+            SESSION_SECRET: 'e2e-session-secret-e2e-session-secret',
+            SUPERADMIN_EMAIL: 'boss@example.org',
+            PUBLIC_FIREBASE_API_KEY: 'e2e',
+            PUBLIC_FIREBASE_AUTH_DOMAIN: 'e2e.firebaseapp.com',
+            PUBLIC_FIREBASE_PROJECT_ID: 'e2e',
         },
     },
 });

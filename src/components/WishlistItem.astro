@@ -2,7 +2,7 @@
 import type { WishlistItem as Item } from "../types/database";
 import DonationForm from "./DonationForm.astro";
 
-const { item, enablePayPal = false } = Astro.props as { item: Item; enablePayPal?: boolean };
+const { item, slug, enablePayPal = false } = Astro.props as { item: Item; slug: string; enablePayPal?: boolean };
 const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
 const isFunded = item.status === 'funded';
 
@@ -24,7 +24,7 @@ const imageAlt = item.imageAlt || item.name;
   )}
 
   <!-- Image clicable -->
-  <a href={`/item/${item.id}`} class="block h-48 bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden group">
+  <a href={`/${slug}/item/${item.id}`} class="block h-48 bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden group">
     <img 
       src={imageUrl}
       alt={imageAlt}
@@ -34,7 +34,7 @@ const imageAlt = item.imageAlt || item.name;
   
   <div class="p-5">
     <!-- Contenido clicable -->
-    <a href={`/item/${item.id}`} class="block mb-4 hover:opacity-80 transition-opacity">
+    <a href={`/${slug}/item/${item.id}`} class="block mb-4 hover:opacity-80 transition-opacity">
       <header>
         <h3 class={`text-xl font-bold ${isFunded ? 'text-green-900' : 'text-gray-900'}`}>{item.name}</h3>
         <p class={`mt-1 text-sm ${isFunded ? 'text-green-700' : 'text-gray-600'}`} style="white-space: pre-line;">{item.description}</p>
@@ -42,7 +42,7 @@ const imageAlt = item.imageAlt || item.name;
     </a>
 
     <!-- Barra de progreso clicable -->
-    <a href={`/item/${item.id}`} class="block mb-4 hover:opacity-80 transition-opacity">
+    <a href={`/${slug}/item/${item.id}`} class="block mb-4 hover:opacity-80 transition-opacity">
       <div class="flex items-center justify-between text-sm mb-2">
         <span class="text-gray-600 font-medium">{item.goal.toFixed(0)} € Meta</span>
         <span class="text-gray-900 font-semibold">{progress}%</span>
@@ -59,7 +59,7 @@ const imageAlt = item.imageAlt || item.name;
     <!-- Zona de interacción -->
     {enablePayPal && !isFunded && (
       <div class="-mx-5 -mb-5 px-5 pb-5 pt-4 bg-gray-50/50" style="position: static;">
-        <DonationForm itemId={item.id} itemName={item.name} maxDonation={maxDonation} />
+        <DonationForm itemId={item.id} itemName={item.name} slug={slug} maxDonation={maxDonation} />
       </div>
     )}
     

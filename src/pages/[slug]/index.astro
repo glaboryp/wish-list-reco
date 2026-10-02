@@ -1,0 +1,70 @@
+---
+import CenterPage from "../../layouts/CenterPage.astro";
+import WishlistItem from "../../components/WishlistItem.astro";
+import { getCenterBySlug } from "../../lib/repo/centers";
+import { listPublicItems } from "../../lib/repo/items";
+
+const { slug } = Astro.params;
+const center = slug ? await getCenterBySlug(slug) : null;
+
+if (!center || center.status !== 'active') {
+  return new Response('Centro no encontrado', { status: 404 });
+}
+
+const items = await listPublicItems(center.id);
+const paragraphs = center.hero_text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+const paypalClientId = center.paypal_configured ? center.paypal_client_id : null;
+---
+
+<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color} paypalClientId={paypalClientId}>
+  <section class="relative h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mx-4 mt-6 mb-12 bg-gray-800">
+    <div class="absolute inset-0 bg-gradient-to-b from-black/60 to-black/40">
+      {center.hero_image_url && (
+        <img src={center.hero_image_url} alt="" class="w-full h-full object-cover" />
+      )}
+    </div>
+
+    <div class="relative z-10 text-center px-4 max-w-3xl">
+      {center.logo_url && (
+        <img src={center.logo_url} alt={center.name} class="mx-auto mb-8 h-16 w-auto object-contain" />
+      )}
+      <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-12 drop-shadow-lg">
+        {center.hero_title || center.name}
+      </h1>
+      <a
+        href="#wishlist"
+        class="inline-block text-white font-semibold px-8 py-3 rounded-lg shadow-lg transition-colors"
+        style="background-color: var(--primary);"
+        onmouseover="this.style.backgroundColor='var(--primary-hover)'"
+        onmouseout="this.style.backgroundColor='var(--primary)'"
+      >
+        Ver la lista de deseos y contribuir
+      </a>
+    </div>
+  </section>
+
+  {paragraphs.length > 0 && (
+    <section class="mx-auto max-w-4xl px-4 mb-16">
+      <div class="bg-white rounded-2xl shadow-lg p-8 md:p-12 border border-gray-100">
+        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Explicación del proyecto</h2>
+        <div class="max-w-none text-lg text-gray-700 leading-relaxed space-y-4">
+          {paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <main class="mx-auto max-w-6xl px-4 pb-16">
+    <h2 id="wishlist" class="text-3xl font-bold text-center text-gray-900 mb-10">Nuestra lista de deseos</h2>
+
+    {items.length === 0 ? (
+      <p class="text-center text-gray-500">Todavía no hay artículos en la lista.</p>
+    ) : (
+      <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <WishlistItem item={item} slug={center.slug} enablePayPal={center.paypal_configured} />
+        ))}
+      </section>
+    )}
+  </main>
+</CenterPage>
