@@ -1,9 +1,10 @@
 ---
 import AdminLayout from "../../../../layouts/AdminLayout.astro";
 import ImageUpload from "../../../../components/admin/ImageUpload.astro";
-import { buttonClass, cardClass, inputClass, labelClass } from "../../../../components/admin/ui";
+import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../../components/admin/ui";
 import { parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
+import { formatEuro } from "../../../../lib/format";
 import { createItem, listAdminItems } from "../../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
@@ -15,82 +16,96 @@ if (Astro.request.method === 'POST') {
   const parsed = parseItem(await Astro.request.formData(), center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await createItem(center.id, parsed.value);
-  return Astro.redirect(`${here}?ok=1`, 303);
+  return Astro.redirect(`${here}?ok=item-created`, 303);
 }
 
 const items = await listAdminItems(center.id);
 
-const statusLabel = (status: string, raised: number, goal: number) => {
-  if (status === 'archived') return 'Archivado';
-  if (status === 'draft') return 'Borrador';
-  return raised >= goal ? 'Financiado' : 'Activo';
+const statusChip = (status: string, raised: number, goal: number) => {
+  if (status === 'archived') return { label: 'Archivado', tone: 'muted' as const };
+  if (status === 'draft') return { label: 'Oculto', tone: 'warn' as const };
+  return raised >= goal ? { label: 'Completado', tone: 'ok' as const } : { label: 'Visible', tone: 'info' as const };
 };
 ---
 
-<AdminLayout title="Artículos" actor={actor} center={center} active="items">
-  <div class={`${cardClass} overflow-x-auto`}>
+<AdminLayout
+  title="Artículos"
+  intro="Lo que tu centro necesita. Cada artículo aparece en tu web con su precio y lo que ya se ha recaudado."
+  actor={actor}
+  center={center}
+  active="items"
+>
+  <div class={cardClass}>
     {items.length === 0 ? (
-      <p class="text-gray-500">Todavía no hay artículos. Crea el primero con el formulario de abajo.</p>
+      <p class="text-base text-muted">Todavía no hay artículos. Crea el primero con el formulario de más abajo.</p>
     ) : (
-      <table class="w-full text-left text-sm">
-        <thead class="text-xs uppercase text-gray-500">
+      <table class={tableClass}>
+        <thead>
           <tr>
-            <th class="py-2 pr-4">Artículo</th>
-            <th class="py-2 pr-4">Recaudado / Precio</th>
-            <th class="py-2 pr-4">Estado</th>
-            <th class="py-2 pr-4">Orden</th>
-            <th class="py-2"></th>
+            <th class={thClass}>Artículo</th>
+            <th class={thClass}>Recaudado</th>
+            <th class={thClass}>En la web</th>
+            <th class={thClass}>Posición</th>
+            <th class={thClass}><span class="sr-only">Acciones</span></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
-          {items.map((item) => (
-            <tr>
-              <td class="py-3 pr-4 font-medium text-gray-900">{item.name}</td>
-              <td class="py-3 pr-4">{item.raised.toFixed(2)} € / {item.goal.toFixed(2)} €</td>
-              <td class="py-3 pr-4">{statusLabel(item.status, item.raised, item.goal)}</td>
-              <td class="py-3 pr-4">{item.sortOrder}</td>
-              <td class="py-3 text-right">
-                <a href={`${here}/${item.id}`} class="text-teal-700 hover:underline">Editar</a>
-              </td>
-            </tr>
-          ))}
+        <tbody>
+          {items.map((item) => {
+            const chip = statusChip(item.status, item.raised, item.goal);
+            return (
+              <tr>
+                <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">{item.name}</td>
+                <td class={`${tdClass} tabular`} data-label="Recaudado">{formatEuro(item.raised)} de {formatEuro(item.goal)}</td>
+                <td class={tdClass} data-label="En la web"><span class={chipClass[chip.tone]}>{chip.label}</span></td>
+                <td class={`${tdClass} tabular`} data-label="Posición">{item.sortOrder}</td>
+                <td class="py-2 text-right">
+                  <a href={`${here}/${item.id}`} class={`${secondaryButtonClass} px-4!`}>
+                    Editar<span class="sr-only"> {item.name}</span>
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     )}
   </div>
 
-  <form method="post" class={`${cardClass} space-y-4`}>
-    <h2 class="text-lg font-semibold text-gray-900">Nuevo artículo</h2>
+  <form method="post" class={`${cardClass} space-y-5`}>
+    <h2 class="text-xl font-bold text-ink">Nuevo artículo</h2>
     <div>
-      <label class={labelClass} for="name">Nombre</label>
+      <label class={labelClass} for="name">Nombre del artículo</label>
       <input id="name" name="name" class={inputClass} maxlength="120" required />
+      <p class={helpClass}>Lo que necesita el centro, por ejemplo «Proyector para el aula».</p>
     </div>
     <div>
       <label class={labelClass} for="description">Descripción</label>
       <textarea id="description" name="description" class={inputClass} rows="4" maxlength="2000"></textarea>
+      <p class={helpClass}>Explica para qué sirve y por qué lo necesita el centro.</p>
     </div>
-    <div class="grid gap-4 sm:grid-cols-3">
+    <div class="grid gap-5 sm:grid-cols-3">
       <div>
-        <label class={labelClass} for="goal">Precio (€)</label>
+        <label class={labelClass} for="goal">Precio del artículo (€)</label>
         <input id="goal" name="goal" class={inputClass} inputmode="decimal" required />
+        <p class={helpClass}>Lo que hay que reunir en total, por ejemplo 120,50.</p>
       </div>
       <div>
-        <label class={labelClass} for="status">Estado</label>
+        <label class={labelClass} for="status">Visibilidad</label>
         <select id="status" name="status" class={inputClass}>
-          <option value="active">Activo (visible)</option>
-          <option value="draft">Borrador (oculto)</option>
+          <option value="active">Visible en la web</option>
+          <option value="draft">Oculto (aún no se ve)</option>
         </select>
+        <p class={helpClass}>Puedes crearlo oculto y mostrarlo más tarde.</p>
       </div>
       <div>
-        <label class={labelClass} for="sort_order">Orden</label>
+        <label class={labelClass} for="sort_order">Posición en la lista</label>
         <input id="sort_order" name="sort_order" class={inputClass} inputmode="numeric" value="0" />
+        <p class={helpClass}>El número más bajo sale primero. Si dudas, déjalo en 0.</p>
       </div>
     </div>
-    <ImageUpload slug={center.slug} name="image_url" label="Imagen" />
-    <div>
-      <label class={labelClass} for="image_alt">Texto alternativo de la imagen</label>
-      <input id="image_alt" name="image_alt" class={inputClass} maxlength="200" />
+    <ImageUpload slug={center.slug} name="image_url" label="Imagen del artículo" help="Se muestra en la lista y en la ficha del artículo." />
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Crear artículo</button>
     </div>
-    <button type="submit" class={buttonClass}>Crear artículo</button>
   </form>
 </AdminLayout>

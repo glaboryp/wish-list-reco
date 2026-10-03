@@ -1,30 +1,66 @@
 ---
-import CenterPage from "../layouts/CenterPage.astro";
+import PlatformPage from "../layouts/PlatformPage.astro";
+import Icon from "../components/Icon.astro";
+import { isHexColor } from "../lib/color";
 import { listActiveCenters } from "../lib/repo/centers";
 
 const centers = await listActiveCenters();
+const single = centers.length === 1;
 ---
 
-<CenterPage title="Listas de deseos">
-  <main class="mx-auto max-w-4xl px-4 py-16">
-    <h1 class="text-4xl font-bold text-center text-gray-900 mb-3">Listas de deseos</h1>
-    <p class="text-center text-gray-600 mb-12">Elige un centro para ver sus necesidades y colaborar.</p>
-    {centers.length === 0 ? (
-      <p class="text-center text-gray-500">Todavía no hay centros disponibles.</p>
-    ) : (
-      <ul class="grid gap-6 sm:grid-cols-2">
-        {centers.map((center) => (
-          <li>
-            <a
-              href={`/${center.slug}`}
-              class="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
-            >
-              {center.logo_url && <img src={center.logo_url} alt="" class="h-12 w-auto object-contain" />}
-              <span class="text-xl font-semibold text-gray-900">{center.name}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    )}
-  </main>
-</CenterPage>
+<PlatformPage title="Listas de deseos">
+  <div class="flex min-h-dvh flex-col">
+    <main class="mx-auto w-full max-w-5xl flex-1 px-4 pb-16 pt-14 sm:pt-20">
+      <h1 class="rise-in max-w-2xl text-4xl font-bold tracking-tight text-ink sm:text-5xl" style="--i: 0">
+        Listas de deseos
+      </h1>
+      <p class="rise-in mt-4 max-w-xl text-lg text-muted" style="--i: 1">
+        Elige un centro para ver sus necesidades y colaborar.
+      </p>
+
+      {centers.length === 0 ? (
+        <p class="mt-12 rounded-xl border border-line bg-white p-6 text-base text-muted shadow-card">
+          Todavía no hay centros disponibles.
+        </p>
+      ) : (
+        <ul class:list={['mt-12 grid gap-5', !single && 'sm:grid-cols-2']}>
+          {centers.map((center, index) => {
+            const color = isHexColor(center.primary_color) ? center.primary_color : '#2b4ba8';
+            return (
+              <li class="rise-in" style={`--i: ${index + 2}`}>
+                <a
+                  href={`/${center.slug}`}
+                  class="group flex h-full items-center gap-5 rounded-xl border border-line bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift sm:p-6"
+                >
+                  <span class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface sm:h-20 sm:w-20">
+                    {center.logo_url ? (
+                      <img src={center.logo_url} alt="" class="h-full w-full object-contain p-1.5" />
+                    ) : (
+                      <span class="flex h-full w-full items-center justify-center text-2xl font-bold text-white" style={`background-color: ${color};`}>
+                        {center.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-xl font-bold text-ink">{center.name}</span>
+                    <span class="mt-1 inline-flex items-center gap-1.5 text-base font-semibold text-brand">
+                      Ver su lista de deseos
+                      <Icon name="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </span>
+                  </span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </main>
+
+    <footer class="border-t border-line">
+      <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-5 text-sm text-muted">
+        <p>Listas de deseos</p>
+        <a href="/login" class="inline-flex min-h-11 items-center underline-offset-4 hover:text-ink hover:underline">Acceso para encargados</a>
+      </div>
+    </footer>
+  </div>
+</PlatformPage>

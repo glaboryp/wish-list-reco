@@ -83,15 +83,15 @@ export async function getAdminItem(centerId: string, itemId: string): Promise<Ad
   return rows.length > 0 ? toAdminItem(rows[0]) : null;
 }
 
-async function setMainImage(centerId: string, itemId: string, url: string, alt: string | null): Promise<void> {
+async function setMainImage(centerId: string, itemId: string, url: string): Promise<void> {
   await sql`
     WITH removed AS (
       DELETE FROM item_images
       WHERE item_id = ${itemId} AND sort_order = 0
         AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
     )
-    INSERT INTO item_images (item_id, image_url, alt_text, sort_order)
-    SELECT id, ${url}, ${alt}, 0 FROM items WHERE id = ${itemId} AND center_id = ${centerId}
+    INSERT INTO item_images (item_id, image_url, sort_order)
+    SELECT id, ${url}, 0 FROM items WHERE id = ${itemId} AND center_id = ${centerId}
   `;
 }
 
@@ -102,7 +102,7 @@ export async function createItem(centerId: string, input: ItemInput): Promise<st
     RETURNING id
   `;
   const id = rows[0].id as string;
-  if (input.imageUrl) await setMainImage(centerId, id, input.imageUrl, input.imageAlt);
+  if (input.imageUrl) await setMainImage(centerId, id, input.imageUrl);
   return id;
 }
 
@@ -119,15 +119,7 @@ export async function updateItem(centerId: string, itemId: string, input: ItemIn
     RETURNING id
   `;
   if (rows.length === 0) return false;
-  if (input.imageUrl) {
-    await setMainImage(centerId, itemId, input.imageUrl, input.imageAlt);
-  } else {
-    await sql`
-      UPDATE item_images SET alt_text = ${input.imageAlt}
-      WHERE item_id = ${itemId} AND sort_order = 0
-        AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
-    `;
-  }
+  if (input.imageUrl) await setMainImage(centerId, itemId, input.imageUrl);
   return true;
 }
 

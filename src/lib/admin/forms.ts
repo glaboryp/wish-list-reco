@@ -36,7 +36,7 @@ function blobField(form: FormData, name: string, slug: string): { ok: true; valu
 export function parseEmail(raw: unknown): Parsed<string> {
   const email = String(raw ?? '').trim().toLowerCase();
   if (email.length === 0 || email.length > 254 || !EMAIL_PATTERN.test(email)) {
-    return fail('Introduce un correo electrónico válido');
+    return fail('Escribe un correo electrónico válido, por ejemplo nombre@gmail.com');
   }
   return { ok: true, value: email };
 }
@@ -53,12 +53,12 @@ export function parseAppearance(form: FormData, slug: string): Parsed<Appearance
 
   const primaryColor = text(form, 'primary_color').toLowerCase();
   if (!isValidPrimaryColor(primaryColor)) {
-    return fail('El color no tiene suficiente contraste con el texto blanco');
+    return fail('Ese color es demasiado claro: el texto blanco de los botones no se leería. Elige uno más oscuro');
   }
 
   const heroImage = blobField(form, 'hero_image_url', slug);
   const logo = blobField(form, 'logo_url', slug);
-  if (!heroImage.ok || !logo.ok) return fail('La imagen no es válida, súbela de nuevo');
+  if (!heroImage.ok || !logo.ok) return fail('No se pudo usar la imagen. Vuelve a elegirla y espera a que aparezca «Imagen lista»');
 
   return {
     ok: true,
@@ -74,19 +74,16 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
   if (description.length > 2000) return fail('La descripción admite como máximo 2000 caracteres');
 
   const goal = parseMoney(text(form, 'goal'));
-  if (goal === null) return fail('El precio debe ser un importe positivo con hasta 2 decimales');
+  if (goal === null) return fail('El precio debe ser un importe mayor que 0, con coma o punto para los céntimos (por ejemplo 120,50)');
 
   const status = text(form, 'status');
-  if (status !== 'draft' && status !== 'active' && status !== 'archived') return fail('El estado no es válido');
+  if (status !== 'draft' && status !== 'active' && status !== 'archived') return fail('La visibilidad elegida no es válida');
 
   const sortRaw = text(form, 'sort_order');
-  if (sortRaw !== '' && !INTEGER_PATTERN.test(sortRaw)) return fail('El orden debe ser un número entero');
+  if (sortRaw !== '' && !INTEGER_PATTERN.test(sortRaw)) return fail('La posición debe ser un número entero (0, 1, 2...)');
 
   const image = blobField(form, 'image_url', slug);
-  if (!image.ok) return fail('La imagen no es válida, súbela de nuevo');
-
-  const imageAlt = text(form, 'image_alt');
-  if (imageAlt.length > 200) return fail('El texto alternativo admite como máximo 200 caracteres');
+  if (!image.ok) return fail('No se pudo usar la imagen. Vuelve a elegirla y espera a que aparezca «Imagen lista»');
 
   return {
     ok: true,
@@ -97,7 +94,6 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
       status,
       sortOrder: sortRaw === '' ? 0 : Number(sortRaw),
       imageUrl: image.value,
-      imageAlt: imageAlt || null,
     },
   };
 }
@@ -107,7 +103,7 @@ export function parseManualDonation(form: FormData): Parsed<{ itemId: string; am
   if (!isUuid(itemId)) return fail('Elige un artículo');
 
   const amount = parseMoney(text(form, 'amount'));
-  if (amount === null) return fail('El importe debe ser positivo con hasta 2 decimales');
+  if (amount === null) return fail('El importe debe ser mayor que 0, con coma o punto para los céntimos (por ejemplo 20,50)');
 
   const note = text(form, 'note');
   if (note.length > 200) return fail('La nota admite como máximo 200 caracteres');

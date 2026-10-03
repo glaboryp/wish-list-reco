@@ -1,6 +1,7 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { buttonClass, cardClass, dangerButtonClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
+import { formatEuro } from "../../../lib/format";
 import { parseManualDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { isUuid } from "../../../lib/ids";
@@ -21,27 +22,35 @@ if (Astro.request.method === 'POST') {
     if (!isUuid(donationId) || !(await voidManualDonation(center.id, donationId))) {
       return fail('No se pudo anular la donación');
     }
-    return Astro.redirect(`${here}?ok=1`, 303);
+    return Astro.redirect(`${here}?ok=donation-voided`, 303);
   }
 
   const parsed = parseManualDonation(form);
   if (!parsed.ok) return fail(parsed.error);
   const created = await addManualDonation({ centerId: center.id, ...parsed.value });
   if (!created) return fail('El artículo no existe en este centro');
-  return Astro.redirect(`${here}?ok=1`, 303);
+  return Astro.redirect(`${here}?ok=donation-added`, 303);
 }
 
 const [donations, items] = await Promise.all([listDonations(center.id), listAdminItems(center.id)]);
 const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 ---
 
-<AdminLayout title="Donaciones" actor={actor} center={center} active="donations">
-  <form method="post" class={`${cardClass} space-y-4`}>
-    <h2 class="text-lg font-semibold text-gray-900">Añadir donación manual</h2>
-    <p class="text-sm text-gray-600">Para donaciones recibidas fuera de PayPal (efectivo, transferencia...).</p>
-    <div class="grid gap-4 sm:grid-cols-3">
+<AdminLayout
+  title="Donaciones"
+  intro="Todo lo que ha recibido tu centro. Las de PayPal se apuntan solas; las que llegan de otra forma (efectivo, transferencia...) las añades tú aquí."
+  actor={actor}
+  center={center}
+  active="donations"
+>
+  <form method="post" class={`${cardClass} space-y-5`}>
+    <div>
+      <h2 class="text-xl font-bold text-ink">Añadir una donación recibida fuera de la web</h2>
+      <p class="mt-1 text-base text-muted">Se suma al total del artículo que elijas, igual que una donación de PayPal.</p>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-3">
       <div>
-        <label class={labelClass} for="item_id">Artículo</label>
+        <label class={labelClass} for="item_id">Artículo al que se destina</label>
         <select id="item_id" name="item_id" class={inputClass} required>
           {items.filter((item) => item.status !== 'archived').map((item) => (
             <option value={item.id}>{item.name}</option>
@@ -51,44 +60,55 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
       <div>
         <label class={labelClass} for="amount">Importe (€)</label>
         <input id="amount" name="amount" class={inputClass} inputmode="decimal" required />
+        <p class={helpClass}>Por ejemplo: 20,50.</p>
       </div>
       <div>
-        <label class={labelClass} for="note">Nota</label>
+        <label class={labelClass} for="note">Nota (opcional)</label>
         <input id="note" name="note" class={inputClass} maxlength="200" />
+        <p class={helpClass}>Por ejemplo: «entregado en mano».</p>
       </div>
     </div>
-    <button type="submit" class={buttonClass}>Añadir donación</button>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Añadir donación</button>
+    </div>
   </form>
 
-  <div class={`${cardClass} overflow-x-auto`}>
+  <div class={cardClass}>
+    <h2 class="mb-2 text-xl font-bold text-ink">Donaciones recibidas</h2>
     {donations.length === 0 ? (
-      <p class="text-gray-500">Todavía no hay donaciones.</p>
+      <p class="text-base text-muted">Todavía no hay donaciones. Cuando alguien done, aparecerá aquí.</p>
     ) : (
-      <table class="w-full text-left text-sm">
-        <thead class="text-xs uppercase text-gray-500">
+      <table class={tableClass}>
+        <thead>
           <tr>
-            <th class="py-2 pr-4">Fecha</th>
-            <th class="py-2 pr-4">Artículo</th>
-            <th class="py-2 pr-4">Importe</th>
-            <th class="py-2 pr-4">Origen</th>
-            <th class="py-2 pr-4">Nota</th>
-            <th class="py-2"></th>
+            <th class={thClass}>Fecha</th>
+            <th class={thClass}>Artículo</th>
+            <th class={thClass}>Importe</th>
+            <th class={thClass}>Cómo llegó</th>
+            <th class={thClass}>Nota</th>
+            <th class={thClass}><span class="sr-only">Acciones</span></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody>
           {donations.map((donation) => (
-            <tr class={donation.voided_at ? 'text-gray-400 line-through' : ''}>
-              <td class="py-3 pr-4">{date.format(new Date(donation.created_at))}</td>
-              <td class="py-3 pr-4">{donation.item_name}</td>
-              <td class="py-3 pr-4">{Number(donation.amount).toFixed(2)} {donation.currency}</td>
-              <td class="py-3 pr-4">{donation.source === 'paypal' ? 'PayPal' : 'Manual'}</td>
-              <td class="py-3 pr-4">{donation.note ?? ''}</td>
-              <td class="py-3 text-right">
+            <tr class={donation.voided_at ? 'text-muted' : ''}>
+              <td class={`${tdClass} tabular`} data-label="Fecha">{date.format(new Date(donation.created_at))}</td>
+              <td class={`${tdClass} font-semibold`} data-label="Artículo">{donation.item_name}</td>
+              <td class={`${tdClass} tabular ${donation.voided_at ? 'line-through' : ''}`} data-label="Importe">
+                {formatEuro(Number(donation.amount))}
+              </td>
+              <td class={tdClass} data-label="Cómo llegó">
+                {donation.voided_at
+                  ? <span class={chipClass.muted}>Anulada</span>
+                  : <span class={donation.source === 'paypal' ? chipClass.info : chipClass.muted}>{donation.source === 'paypal' ? 'PayPal' : 'Apuntada a mano'}</span>}
+              </td>
+              <td class={tdClass} data-label="Nota">{donation.note ?? ''}</td>
+              <td class="py-2 text-right">
                 {donation.source === 'manual' && !donation.voided_at && (
-                  <form method="post">
+                  <form method="post" onsubmit="return confirm('¿Anular esta donación? Dejará de sumar en el total del artículo.')">
                     <input type="hidden" name="intent" value="void" />
                     <input type="hidden" name="donation_id" value={donation.id} />
-                    <button type="submit" class={dangerButtonClass}>Anular</button>
+                    <button type="submit" class={`${dangerButtonClass} px-4!`}>Anular donación</button>
                   </form>
                 )}
               </td>

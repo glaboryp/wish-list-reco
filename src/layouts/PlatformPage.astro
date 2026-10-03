@@ -1,0 +1,29 @@
+---
+import "../styles/global.css";
+import Analytics from '@vercel/analytics/astro';
+import SpeedInsights from "@vercel/speed-insights/astro";
+
+interface Props {
+  title: string;
+  analytics?: boolean;
+  noindex?: boolean;
+}
+
+const { title, analytics = true, noindex = false } = Astro.props;
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <title>{title}</title>
+  </head>
+  <body class="antialiased">
+    <slot />
+    {analytics && <Analytics />}
+    {analytics && <SpeedInsights />}
+  </body>
+</html>

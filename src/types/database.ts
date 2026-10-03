@@ -81,7 +81,6 @@ export interface ItemInput {
   status: 'draft' | 'active' | 'archived';
   sortOrder: number;
   imageUrl: string | null;
-  imageAlt: string | null;
 }
 
 export interface AppearanceInput {
