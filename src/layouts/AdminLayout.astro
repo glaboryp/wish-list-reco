@@ -77,7 +77,7 @@ const nav = center
                 </select>
               </label>
             ) : (
-              <p class="truncate text-xl font-bold text-ink">{center ? center.name : 'Administración'}</p>
+              <p class="truncate text-xl font-bold text-ink">{center ? `Panel de ${center.name}` : 'Administración de la plataforma'}</p>
             )}
           </div>
           <div class="flex items-center gap-3">
@@ -89,7 +89,7 @@ const nav = center
               </a>
             )}
             <form method="post" action="/api/auth/logout">
-              <button type="submit" class={`${secondaryButtonClass} px-4!`}>
+              <button type="submit" class="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-base font-semibold text-muted transition-colors hover:bg-surface hover:text-ink">
                 <Icon name="sign-out" class="h-4 w-4" />
                 Salir
               </button>
@@ -97,7 +97,7 @@ const nav = center
           </div>
         </div>
         {center && (
-          <nav aria-label="Secciones del panel" class="-mb-px flex gap-1 overflow-x-auto">
+          <nav aria-label="Secciones del panel" class="-mb-px flex gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_88%,transparent)] sm:[mask-image:none]">
             {nav.map((entry) => (
               <a
                 href={entry.href}
@@ -145,6 +145,7 @@ const nav = center
         flash.querySelector('[data-dismiss]')?.addEventListener('click', () => flash.remove());
         setTimeout(() => flash.remove(), 8000);
       });
+      document.querySelector('nav [aria-current="page"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
       document.getElementById('center-switch')?.addEventListener('change', (event) => {
         window.location.assign((event.target as HTMLSelectElement).value);
       });

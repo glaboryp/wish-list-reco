@@ -1,124 +1,104 @@
 ---
+import Icon from "./Icon.astro";
+
 interface Props {
   itemId: string;
   itemName: string;
   slug: string;
+  centerName?: string;
   maxDonation: number;
   isDetailPage?: boolean;
 }
 
-const { itemId, itemName, slug, maxDonation, isDetailPage = false } = Astro.props;
+const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false } = Astro.props;
 
-// IDs únicos para este componente
 const inputId = `amount-${itemId}`;
 const buttonId = `paypal-button-${itemId}`;
+const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 ---
 
-<div class="flex flex-col gap-3" style="transform: none; will-change: auto;">
-  <div
-    class="flex items-center justify-between"
-    id={`${inputId}-label-container`}
-  >
-    <label for={inputId} class="text-sm font-medium text-gray-900"
-      >Cantidad a donar (EUR)</label
-    >
-    <span class="text-xs text-gray-500">Máx: {maxDonation} €</span>
+<div class="flex flex-col gap-4" id={`${buttonId}-form`}>
+  <div>
+    <label for={inputId} class="block text-base font-semibold text-ink">¿Cuánto quieres donar? (en euros)</label>
+    <p id={`${inputId}-help`} class="mt-1 text-sm text-muted">
+      Faltan {maxDonation} € para completar este artículo. Puedes donar desde 1 €.
+    </p>
   </div>
-  <input
-    id={inputId}
-    type="number"
-    name="amount"
-    min="1"
-    max={maxDonation}
-    step="1"
-    placeholder={`Ej. ${Math.min(10, maxDonation)}`}
-    class="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:outline-none"
-    style="--focus-color: var(--primary);"
-    onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent)';"
-    onblur="this.style.borderColor=''; this.style.boxShadow='';"
-  />
-  <p id={`${inputId}-help`} class="text-xs text-gray-500 -mt-1">
-    Faltan {maxDonation} € para completar este artículo
-  </p>
-  <p id={`${inputId}-error`} class="text-xs text-red-600 hidden -mt-1">
-    La cantidad no puede superar {maxDonation} €
-  </p>
-  <div class="flex items-start gap-2 mt-1">
+
+  <div class="flex flex-wrap gap-2" data-presets>
+    {presets.map((value) => (
+      <button type="button" data-amount={value} class="min-h-11 rounded-lg border border-line-strong bg-white px-4 text-base font-semibold text-ink transition-colors hover:bg-surface aria-pressed:border-(color:--primary) aria-pressed:bg-surface" aria-pressed="false">
+        {value} €
+      </button>
+    ))}
+    <button type="button" data-amount={maxDonation} class="min-h-11 rounded-lg border border-line-strong bg-white px-4 text-base font-semibold text-ink transition-colors hover:bg-surface aria-pressed:border-(color:--primary) aria-pressed:bg-surface" aria-pressed="false">
+      Completar ({maxDonation} €)
+    </button>
+  </div>
+
+  <div>
+    <input
+      id={inputId}
+      type="number"
+      name="amount"
+      min="1"
+      max={maxDonation}
+      step="1"
+      inputmode="numeric"
+      placeholder={`Otra cantidad, por ejemplo ${Math.min(10, maxDonation)}`}
+      class="min-h-12 w-full rounded-lg border border-line-strong bg-white px-4 text-lg text-ink placeholder:text-muted focus:outline-none"
+      style="--focus-color: var(--primary);"
+      onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent)';"
+      onblur="this.style.borderColor=''; this.style.boxShadow='';"
+    />
+    <p id={`${inputId}-error`} role="alert" class="mt-2 hidden text-sm font-semibold text-red-800">
+      La cantidad no puede superar {maxDonation} €
+    </p>
+  </div>
+
+  <div class="flex items-start gap-3">
     <input
       id={`${inputId}-cover-fees`}
       type="checkbox"
-      class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      class="mt-0.5 h-6 w-6 shrink-0 rounded border-line-strong"
+      style="accent-color: var(--primary);"
     />
-    <label for={`${inputId}-cover-fees`} class="text-sm text-gray-700">
-      Cubrir gastos de gestión
-      <span id={`${inputId}-fees-label-extra`} class="text-sm text-gray-600"
-      ></span>
+    <label for={`${inputId}-cover-fees`} class="text-base text-ink">
+      Añadir las comisiones de PayPal para que {centerName} reciba la donación completa
+      <span id={`${inputId}-fees-label-extra`} class="text-muted"></span>
     </label>
   </div>
-  <p id={`${inputId}-fees-summary`} class="text-xs text-gray-600 mt-1 hidden">
-  </p>
-  <!-- Mensaje para móvil en lista -->
-  <div
-    id={`${buttonId}-mobile-message`}
-    class="hidden text-center py-4 rounded-lg border"
-    style="background-color: color-mix(in srgb, var(--primary) 10%, white); border-color: color-mix(in srgb, var(--primary) 30%, white);"
-  >
-    <p
-      class="text-sm font-medium mb-2"
-      style="color: color-mix(in srgb, var(--primary) 90%, black);"
-    >
-      Donación disponible
-    </p>
-    <p
-      class="text-xs"
-      style="color: color-mix(in srgb, var(--primary) 70%, black);"
-    >
-      Haz click en la tarjeta para ver detalles y donar
-    </p>
-  </div>
+  <p id={`${inputId}-fees-summary`} class="tabular hidden rounded-lg bg-surface px-3 py-2 text-base text-ink"></p>
 
-  <!-- Indicador de carga -->
-  <div id={`${buttonId}-loading`} class="hidden text-center py-3">
-    <div
-      class="inline-flex items-center gap-2 text-sm font-medium"
-      style="color: var(--primary);"
-    >
-      <svg
-        class="animate-spin h-5 w-5"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle
-          class="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          stroke-width="4"></circle>
-        <path
-          class="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        ></path>
+  <div id={`${buttonId}-mobile-message`} class="hidden"></div>
+
+  <div id={`${buttonId}-loading`} class="hidden py-2 text-center">
+    <div class="inline-flex items-center gap-2 text-base font-semibold" style="color: var(--primary);">
+      <svg class="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
-      <span>Cargando formulario de pago...</span>
+      <span>Cargando el formulario de pago...</span>
     </div>
   </div>
 
-  <!-- Botones de PayPal -->
-  <div class="flex flex-col gap-2 -mt-1" id={`${buttonId}-buttons-container`}>
-    <div
-      id={`${buttonId}-paypal`}
-      class="touch-manipulation paypal-buttons-container"
-    >
-    </div>
-    <div
-      id={`${buttonId}-card`}
-      class="touch-manipulation paypal-buttons-container"
-    >
-    </div>
+  <div class="flex flex-col gap-2" id={`${buttonId}-buttons-container`}>
+    <div id={`${buttonId}-paypal`} class="touch-manipulation paypal-buttons-container"></div>
+    <div id={`${buttonId}-card`} class="touch-manipulation paypal-buttons-container"></div>
   </div>
+
+  <p class="flex items-start gap-2 text-sm text-muted">
+    <Icon name="lock-simple" class="mt-0.5 h-4 w-4 shrink-0" />
+    <span>Pago seguro con PayPal o tarjeta. El dinero va directamente a {centerName}.</span>
+  </p>
+</div>
+
+<div id={`${buttonId}-thanks`} class="hidden space-y-4" role="status">
+  <h3 class="text-xl font-bold text-ink">¡Gracias por tu donación!</h3>
+  <p class="text-base text-ink/90">Tu aportación a «{itemName}» ya cuenta y {centerName} te lo agradece de corazón.</p>
+  <button type="button" data-reload class="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-base font-semibold text-white" style="background-color: var(--primary);">
+    Ver el artículo actualizado
+  </button>
 </div>
 
 <style>
@@ -162,15 +142,12 @@ const buttonId = `paypal-button-${itemId}`;
     isDetailPage,
   }}
 >
-  // Función para mostrar toast
+  // Aviso breve: abajo en móvil y abajo a la derecha en pantallas grandes
   function showToast(message, type = "error") {
     const toast = document.createElement("div");
-    toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50 animate-slide-in ${
-      type === "error"
-        ? "bg-red-600"
-        : type === "success"
-          ? "bg-green-600"
-          : "bg-blue-600"
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
+    toast.className = `fixed inset-x-4 bottom-4 z-50 rounded-lg px-5 py-3 text-base font-semibold text-white shadow-lg sm:left-auto sm:right-6 sm:max-w-sm animate-slide-in ${
+      type === "error" ? "bg-red-800" : type === "success" ? "bg-green-800" : "bg-gray-900"
     }`;
     toast.textContent = message;
     document.body.appendChild(toast);
@@ -178,7 +155,7 @@ const buttonId = `paypal-button-${itemId}`;
     setTimeout(() => {
       toast.classList.add("opacity-0");
       setTimeout(() => toast.remove(), 300);
-    }, 5000);
+    }, 6000);
   }
 
   const renderButtons = () => {
@@ -259,7 +236,7 @@ const buttonId = `paypal-button-${itemId}`;
 
       if (value > maxDonation) {
         amountInput.classList.add("border-red-500", "ring-2", "ring-red-200");
-        amountInput.classList.remove("border-gray-300");
+        amountInput.classList.remove("border-line-strong");
         helpText.classList.add("hidden");
         errorText.classList.remove("hidden");
         buttonsEnabled = false;
@@ -273,7 +250,7 @@ const buttonId = `paypal-button-${itemId}`;
           "ring-2",
           "ring-red-200",
         );
-        amountInput.classList.add("border-gray-300");
+        amountInput.classList.add("border-line-strong");
         helpText.classList.remove("hidden");
         errorText.classList.add("hidden");
         buttonsEnabled = true;
@@ -290,6 +267,25 @@ const buttonId = `paypal-button-${itemId}`;
     // Escuchar cambios en el input
     amountInput.addEventListener("input", validateAmount);
     amountInput.addEventListener("change", validateAmount);
+
+    const presetButtons = Array.from(
+      document.querySelectorAll(`#${buttonId}-form [data-amount]`),
+    );
+    const syncPresets = () => {
+      presetButtons.forEach((button) =>
+        button.setAttribute(
+          "aria-pressed",
+          String(button.dataset.amount === amountInput.value),
+        ),
+      );
+    };
+    presetButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        amountInput.value = button.dataset.amount;
+        amountInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    });
+    amountInput.addEventListener("input", syncPresets);
 
     if (coverFeesCheckbox) {
       coverFeesCheckbox.addEventListener("change", updateFeeUI);
@@ -452,11 +448,19 @@ const buttonId = `paypal-button-${itemId}`;
             const json = await r.json();
 
             if (r.ok) {
-              showToast(
-                "¡Pago completado con éxito! Gracias por tu contribución 🎉",
-                "success",
-              );
-              setTimeout(() => window.location.reload(), 2000);
+              const form = document.getElementById(`${buttonId}-form`);
+              const thanks = document.getElementById(`${buttonId}-thanks`);
+              if (form && thanks) {
+                form.classList.add("hidden");
+                thanks.classList.remove("hidden");
+                thanks
+                  .querySelector("[data-reload]")
+                  ?.addEventListener("click", () => window.location.reload());
+                thanks.scrollIntoView({ behavior: "smooth", block: "center" });
+              } else {
+                showToast("¡Pago completado con éxito! Gracias por tu contribución.", "success");
+                setTimeout(() => window.location.reload(), 2000);
+              }
               return;
             }
             if (r.status < 500 || attempt === attempts) {

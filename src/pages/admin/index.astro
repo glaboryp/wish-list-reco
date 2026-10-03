@@ -47,15 +47,15 @@ const host = Astro.url.host;
             <tr>
               <td class={`${tdClass} font-semibold text-ink`} data-label="Centro">{center.name}</td>
               <td class={tdClass} data-label="Su web">
-                <a href={`/${center.slug}`} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 font-semibold text-brand hover:underline">
+                <a href={`/${center.slug}`} target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center gap-1 font-semibold text-brand hover:underline">
                   /{center.slug}
                   <Icon name="arrow-up-right" class="h-4 w-4" />
                   <span class="sr-only">(se abre en una pestaña nueva)</span>
                 </a>
               </td>
               <td class={tdClass} data-label="PayPal">
-                <span class={center.paypal_configured ? chipClass.ok : chipClass.warn}>
-                  {center.paypal_configured ? `Configurado (${center.paypal_env === 'live' ? 'real' : 'pruebas'})` : 'Sin configurar'}
+                <span class={center.paypal_configured ? (center.paypal_env === 'live' ? chipClass.ok : chipClass.info) : chipClass.warn}>
+                  {center.paypal_configured ? center.paypal_env === 'live' ? 'Cobra dinero real' : 'Solo pruebas' : 'Sin configurar'}
                 </span>
               </td>
               <td class={tdClass} data-label="Estado">

@@ -1,6 +1,7 @@
 ---
 import CenterPage from "../../layouts/CenterPage.astro";
 import WishlistItem from "../../components/WishlistItem.astro";
+import { formatEuro } from "../../lib/format";
 import { getCenterBySlug } from "../../lib/repo/centers";
 import { listPublicItems } from "../../lib/repo/items";
 
@@ -13,30 +14,35 @@ if (!center || center.status !== 'active') {
 
 const items = await listPublicItems(center.id);
 const paragraphs = center.hero_text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-const paypalClientId = center.paypal_configured ? center.paypal_client_id : null;
+const totalGoal = items.reduce((sum, item) => sum + item.goal, 0);
+const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item.goal), 0);
 ---
 
-<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color} paypalClientId={paypalClientId}>
-  <section class="relative h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mx-4 mt-6 mb-12 bg-gray-800">
-    <div class="absolute inset-0 bg-gradient-to-b from-black/60 to-black/40">
-      {center.hero_image_url && (
-        <img src={center.hero_image_url} alt="" class="w-full h-full object-cover" />
-      )}
-    </div>
+<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color}>
+  <section
+    class="relative isolate mx-4 mt-6 flex min-h-[420px] items-end overflow-hidden rounded-2xl sm:min-h-[520px]"
+    style="background: linear-gradient(135deg, var(--primary-hover), var(--primary));"
+  >
+    {center.hero_image_url && (
+      <img src={center.hero_image_url} alt="" class="absolute inset-0 -z-10 h-full w-full object-cover" />
+    )}
+    <div class="absolute inset-0 -z-10 bg-linear-to-t from-black/70 via-black/35 to-black/10"></div>
 
-    <div class="relative z-10 text-center px-4 max-w-3xl">
+    <div class="mx-auto w-full max-w-6xl px-6 pb-10 pt-24 sm:px-10 sm:pb-14">
       {center.logo_url && (
-        <img src={center.logo_url} alt={center.name} class="mx-auto mb-8 h-16 w-auto object-contain" />
+        <img src={center.logo_url} alt={center.name} class="mb-6 h-14 w-auto max-w-[70%] rounded-lg bg-white/95 p-2 object-contain sm:h-16" />
       )}
-      <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-12 drop-shadow-lg">
+      <h1 class="max-w-3xl text-4xl font-bold tracking-tight text-white sm:text-5xl">
         {center.hero_title || center.name}
       </h1>
+      {totalGoal > 0 && (
+        <p class="tabular mt-4 max-w-xl text-lg text-white/95">
+          Llevamos reunidos {formatEuro(totalRaised)} de {formatEuro(totalGoal)}.
+        </p>
+      )}
       <a
         href="#wishlist"
-        class="inline-block text-white font-semibold px-8 py-3 rounded-lg shadow-lg transition-colors"
-        style="background-color: var(--primary);"
-        onmouseover="this.style.backgroundColor='var(--primary-hover)'"
-        onmouseout="this.style.backgroundColor='var(--primary)'"
+        class="mt-8 inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-6 text-base font-semibold text-ink shadow-lg transition-colors hover:bg-gray-100"
       >
         Ver la lista de deseos y contribuir
       </a>
@@ -44,27 +50,30 @@ const paypalClientId = center.paypal_configured ? center.paypal_client_id : null
   </section>
 
   {paragraphs.length > 0 && (
-    <section class="mx-auto max-w-4xl px-4 mb-16">
-      <div class="bg-white rounded-2xl shadow-lg p-8 md:p-12 border border-gray-100">
-        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Explicación del proyecto</h2>
-        <div class="max-w-none text-lg text-gray-700 leading-relaxed space-y-4">
+    <section class="mx-auto mt-14 max-w-6xl px-4">
+      <div class="max-w-3xl">
+        <h2 class="text-3xl font-bold text-ink">Explicación del proyecto</h2>
+        <div class="mt-5 space-y-4 text-lg leading-relaxed text-ink/90">
           {paragraphs.map((paragraph) => <p>{paragraph}</p>)}
         </div>
       </div>
     </section>
   )}
 
-  <main class="mx-auto max-w-6xl px-4 pb-16">
-    <h2 id="wishlist" class="text-3xl font-bold text-center text-gray-900 mb-10">Nuestra lista de deseos</h2>
+  <main class="mx-auto max-w-6xl scroll-mt-6 px-4 pb-16 pt-14" id="wishlist">
+    <h2 class="text-3xl font-bold text-ink">Nuestra lista de deseos</h2>
+    <p class="mt-2 max-w-xl text-lg text-muted">Elige un artículo para ver sus fotos y colaborar con lo que quieras.</p>
 
     {items.length === 0 ? (
-      <p class="text-center text-gray-500">Todavía no hay artículos en la lista.</p>
+      <p class="mt-8 rounded-xl border border-line bg-white p-6 text-base text-muted shadow-card">Todavía no hay artículos en la lista.</p>
     ) : (
-      <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <ul class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
-          <WishlistItem item={item} slug={center.slug} enablePayPal={center.paypal_configured} />
+          <li>
+            <WishlistItem item={item} slug={center.slug} canDonate={center.paypal_configured} />
+          </li>
         ))}
-      </section>
+      </ul>
     )}
   </main>
 </CenterPage>
