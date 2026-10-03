@@ -7,8 +7,10 @@ import { buttonClass, linkClass } from "../components/admin/ui";
 <PlatformPage title="Entrar - Listas de deseos" analytics={false} noindex>
   <main class="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-10">
     <div class="rounded-xl border border-line bg-white p-6 shadow-card sm:p-8">
-      <h1 class="text-3xl font-bold tracking-tight text-ink">Acceso al panel</h1>
-      <p class="mt-3 text-base text-muted">Entra con la cuenta de Google que tiene dado de alta tu centro.</p>
+      <h1 class="text-3xl font-bold tracking-tight text-ink">Acceso para encargadas</h1>
+      <p class="mt-3 text-base text-muted">
+        Esta zona es solo para las encargadas de cada centro, que gestionan sus artículos y donaciones. Entra con la cuenta de Google que tiene dado de alta tu centro.
+      </p>
 
       <button id="google-login" type="button" class={`${buttonClass} mt-8 w-full`}>
         <Icon name="google-logo" class="h-5 w-5" />
@@ -21,14 +23,22 @@ import { buttonClass, linkClass } from "../components/admin/ui";
       </div>
 
       <p class="mt-6 border-t border-line pt-5 text-base text-muted">
-        ¿No puedes entrar? Escribe a <a href="mailto:glabory@gmail.com" class={linkClass}>glabory@gmail.com</a> e indica el correo de Google que usas.
+        Si eres encargada y no puedes entrar, escribe a <a href="mailto:glabory@gmail.com" class={linkClass}>glabory@gmail.com</a> con el correo de Google que usas.
       </p>
     </div>
 
-    <a href="/" class={`${linkClass} mt-6 inline-flex min-h-11 items-center gap-1.5 self-start`}>
-      <Icon name="arrow-left" class="h-4 w-4" />
-      Volver al inicio
-    </a>
+    <div class="mt-6 space-y-4 text-base text-muted">
+      <p>
+        <strong class="font-semibold text-ink">¿Quieres donar?</strong> No necesitas entrar: elige un centro en la lista y ayúdale con lo que necesita.
+      </p>
+      <p>
+        <strong class="font-semibold text-ink">¿Quieres una lista de deseos para tu centro?</strong> Cuéntanoslo en <a href="mailto:glabory@gmail.com" class={linkClass}>glabory@gmail.com</a>.
+      </p>
+      <a href="/" class={`${linkClass} inline-flex min-h-11 items-center gap-1.5`}>
+        <Icon name="arrow-left" class="h-4 w-4" />
+        Ir a la lista de centros
+      </a>
+    </div>
   </main>
 
   <script>
