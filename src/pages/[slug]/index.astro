@@ -42,7 +42,8 @@ const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item
       )}
       <a
         href="#wishlist"
-        class="mt-8 inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-6 text-base font-semibold text-ink shadow-lg transition-colors hover:bg-gray-100"
+        class="cta mt-8 inline-flex min-h-12 items-center justify-center rounded-lg px-6 text-base font-semibold text-white shadow-lg ring-2 ring-white transition-colors"
+        style="background-color: var(--primary);"
       >
         Ver la lista de deseos y contribuir
       </a>
@@ -77,3 +78,9 @@ const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item
     )}
   </main>
 </CenterPage>
+
+<style>
+  .cta:hover {
+    background-color: var(--primary-hover) !important;
+  }
+</style>
