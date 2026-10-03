@@ -20,10 +20,13 @@ const successMessages: Record<string, string> = {
   'item-created': 'Artículo creado. Ya aparece en tu web si está visible.',
   'item-saved': 'Artículo guardado.',
   'item-removed': 'Artículo borrado.',
+  'image-added': 'Imagen añadida.',
+  'image-removed': 'Imagen quitada.',
+  'cover-changed': 'Portada cambiada.',
   'donation-added': 'Donación añadida.',
   'donation-voided': 'Donación anulada. Ya no suma en el total.',
-  'user-added': 'Encargado añadido. Ya puede entrar con su cuenta de Google.',
-  'user-removed': 'Encargado quitado.',
+  'user-added': 'Encargada añadida. Ya puede entrar con su cuenta de Google.',
+  'user-removed': 'Acceso quitado.',
   'center-created': 'Centro creado.',
 };
 const ok = Astro.url.searchParams.get('ok');
@@ -37,7 +40,7 @@ const nav = center
       { key: 'appearance', label: 'Apariencia', href: base },
       { key: 'items', label: 'Artículos', href: `${base}/items` },
       { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
-      { key: 'users', label: 'Encargados', href: `${base}/users` },
+      { key: 'users', label: 'Encargadas', href: `${base}/users` },
     ]
   : [{ key: 'centers', label: 'Centros', href: '/admin' }];
 ---

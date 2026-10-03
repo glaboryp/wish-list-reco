@@ -1,10 +1,12 @@
 ---
 import AdminLayout from "../../../../layouts/AdminLayout.astro";
 import ImageUpload from "../../../../components/admin/ImageUpload.astro";
-import { buttonClass, cardClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, linkClass } from "../../../../components/admin/ui";
+import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, linkClass, secondaryButtonClass } from "../../../../components/admin/ui";
 import Icon from "../../../../components/Icon.astro";
 import { formatEuro } from "../../../../lib/format";
-import { parseItem } from "../../../../lib/admin/forms";
+import { MAX_ITEM_IMAGES, addItemImage, listAdminItems, listItemImages, removeItemImage, setCoverImage } from "../../../../lib/repo/items";
+import { positionOptions } from "../../../../lib/admin/positions";
+import { parseImageUrl, parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { isUuid } from "../../../../lib/ids";
 import { getAdminItem, removeOrArchiveItem, updateItem } from "../../../../lib/repo/items";
@@ -30,11 +32,33 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect(message ? `${listUrl}?error=${encodeURIComponent(message)}` : `${listUrl}?ok=item-removed`, 303);
   }
 
+  const imageId = String(form.get('image_id') ?? '');
+  const imageFailure = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
+
+  if (form.get('intent') === 'add_image') {
+    const image = parseImageUrl(form, center.slug);
+    if (!image.ok) return imageFailure(image.error);
+    const outcome = await addItemImage(center.id, item.id, image.value);
+    if (outcome === 'full') return imageFailure(`Ya hay ${MAX_ITEM_IMAGES} imágenes. Quita alguna para poder añadir otra`);
+    return Astro.redirect(`${here}?ok=image-added`, 303);
+  }
+  if (form.get('intent') === 'remove_image') {
+    if (!isUuid(imageId) || !(await removeItemImage(center.id, item.id, imageId))) return imageFailure('No se pudo quitar la imagen');
+    return Astro.redirect(`${here}?ok=image-removed`, 303);
+  }
+  if (form.get('intent') === 'make_cover') {
+    if (!isUuid(imageId) || !(await setCoverImage(center.id, item.id, imageId))) return imageFailure('No se pudo cambiar la portada');
+    return Astro.redirect(`${here}?ok=cover-changed`, 303);
+  }
+
   const parsed = parseItem(form, center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await updateItem(center.id, item.id, parsed.value);
   return Astro.redirect(`${here}?ok=item-saved`, 303);
 }
+
+const [images, allItems] = await Promise.all([listItemImages(center.id, item.id), listAdminItems(center.id)]);
+const positions = positionOptions(allItems, item.id);
 ---
 
 <AdminLayout title={item.name} actor={actor} center={center} active="items">
@@ -83,15 +107,61 @@ if (Astro.request.method === 'POST') {
       </div>
       <div>
         <label class={labelClass} for="sort_order">Posición en la lista</label>
-        <input id="sort_order" name="sort_order" class={inputClass} inputmode="numeric" value={String(item.sortOrder)} />
-        <p class={helpClass}>El número más bajo sale primero.</p>
+        <select id="sort_order" name="sort_order" class={inputClass}>
+          {positions.map((option) => <option value={option.value} selected={option.selected}>{option.label}</option>)}
+        </select>
+        <p class={helpClass}>Si eliges una posición ocupada, los demás artículos se mueven solos para dejarle sitio.</p>
       </div>
     </div>
-    <ImageUpload slug={center.slug} name="image_url" label="Imagen del artículo" help="Se muestra en la lista y en la ficha del artículo." current={item.imageUrl} />
     <div class={formFooterClass}>
       <button type="submit" class={buttonClass}>Guardar cambios</button>
     </div>
   </form>
+
+  <section class={`${cardClass} space-y-5`}>
+    <div>
+      <h2 class="text-xl font-bold text-ink">Imágenes del artículo</h2>
+      <p class="mt-1 text-base text-muted">
+        La primera es la portada: la que se ve en la lista. Las demás se ven al abrir el artículo. Puedes tener hasta {MAX_ITEM_IMAGES}.
+      </p>
+    </div>
+    {images.length === 0 ? (
+      <p class="text-base text-muted">Este artículo todavía no tiene imágenes.</p>
+    ) : (
+      <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {images.map((image, index) => (
+          <li class="space-y-3 rounded-lg border border-line p-3">
+            <div class="aspect-video overflow-hidden rounded-md bg-surface">
+              <img src={image.image_url} alt="" class="h-full w-full object-cover" />
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              {index === 0 ? (
+                <span class={chipClass.info}>Portada</span>
+              ) : (
+                <form method="post">
+                  <input type="hidden" name="intent" value="make_cover" />
+                  <input type="hidden" name="image_id" value={image.id} />
+                  <button type="submit" class={`${secondaryButtonClass} px-4!`}>Poner de portada</button>
+                </form>
+              )}
+              <form method="post" onsubmit="return confirm('¿Quitar esta imagen del artículo?')">
+                <input type="hidden" name="intent" value="remove_image" />
+                <input type="hidden" name="image_id" value={image.id} />
+                <button type="submit" class={`${dangerButtonClass} px-4!`}>Quitar</button>
+              </form>
+            </div>
+          </li>
+        ))}
+      </ul>
+    )}
+    {images.length < MAX_ITEM_IMAGES && (
+      <form method="post" class="space-y-4 border-t border-line pt-5">
+        <input type="hidden" name="intent" value="add_image" />
+        <ImageUpload slug={center.slug} name="image_url" label="Añadir otra imagen" help="Elige la imagen y, cuando salga «Imagen lista», pulsa Añadir imagen." requireUpload />
+        <button type="submit" class={buttonClass}>Añadir imagen</button>
+      </form>
+    )}
+  </section>
 
   <form
     method="post"

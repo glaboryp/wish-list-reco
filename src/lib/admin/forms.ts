@@ -20,6 +20,7 @@ const INTEGER_PATTERN = /^-?\d{1,6}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAYPAL_CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]{10,200}$/;
 const MAX_AMOUNT = 1_000_000;
+export const END_OF_LIST = 9999;
 
 function parseMoney(raw: string): number | null {
   if (!MONEY_PATTERN.test(raw)) return null;
@@ -80,7 +81,7 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
   if (status !== 'draft' && status !== 'active' && status !== 'archived') return fail('La visibilidad elegida no es válida');
 
   const sortRaw = text(form, 'sort_order');
-  if (sortRaw !== '' && !INTEGER_PATTERN.test(sortRaw)) return fail('La posición debe ser un número entero (0, 1, 2...)');
+  if (sortRaw !== '' && !INTEGER_PATTERN.test(sortRaw)) return fail('La posición debe ser un número entero (1, 2, 3...)');
 
   const image = blobField(form, 'image_url', slug);
   if (!image.ok) return fail('No se pudo usar la imagen. Vuelve a elegirla y espera a que aparezca «Imagen lista»');
@@ -92,10 +93,18 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
       description,
       goal,
       status,
-      sortOrder: sortRaw === '' ? 0 : Number(sortRaw),
+      sortOrder: sortRaw === '' ? END_OF_LIST : Number(sortRaw),
       imageUrl: image.value,
     },
   };
+}
+
+export function parseImageUrl(form: FormData, slug: string): Parsed<string> {
+  const image = blobField(form, 'image_url', slug);
+  if (!image.ok || image.value === null) {
+    return fail('No se pudo usar la imagen. Elige una y espera a que aparezca «Imagen lista» antes de pulsar el botón');
+  }
+  return { ok: true, value: image.value };
 }
 
 export function parseManualDonation(form: FormData): Parsed<{ itemId: string; amount: number; note: string }> {

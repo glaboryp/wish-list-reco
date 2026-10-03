@@ -79,7 +79,7 @@ Sobrio, claro y de confianza. Lo importante es que cualquier persona no técnica
 - **Acento de la plataforma** (`brand`): botones primarios, enlaces, pestaña activa y foco. Nunca se usa el color de un centro en inicio, login o panel.
 - **Tinta y gris** (`ink`, `muted`): texto y ayudas. `muted` cumple contraste AA sobre blanco.
 - **Líneas** (`line` para separadores, `line-strong` para bordes de controles, que superan 3:1).
-- **Color de centro** (`center-primary`): variable `--primary` en la web pública de cada centro, elegida por el encargado y validada para contraste con texto blanco. En el panel solo aparece en la vista previa.
+- **Color de centro** (`center-primary`): variable `--primary` en la web pública de cada centro, elegida por la encargada y validada para contraste con texto blanco. En el panel solo aparece en la vista previa.
 
 ## Typography
 

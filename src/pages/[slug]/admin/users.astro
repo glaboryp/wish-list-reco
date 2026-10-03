@@ -18,8 +18,8 @@ if (Astro.request.method === 'POST') {
 
   if (form.get('intent') === 'remove') {
     const outcome = await removeCenterUser(center.id, parsed.value, { force: actor.isSuperadmin });
-    if (outcome === 'last') return fail('No se puede quitar al último encargado del centro');
-    if (outcome === 'missing') return fail('Ese correo no es encargado de este centro');
+    if (outcome === 'last') return fail('No se puede quitar a la última encargada del centro');
+    if (outcome === 'missing') return fail('Ese correo no es encargada de este centro');
     return Astro.redirect(`${here}?ok=user-removed`, 303);
   }
 
@@ -31,8 +31,8 @@ const users = await listCenterUsers(center.id);
 ---
 
 <AdminLayout
-  title="Encargados"
-  intro="Las personas que pueden gestionar este centro. Entran con su cuenta de Google."
+  title="Encargadas"
+  intro="Las encargadas de este centro: las personas que pueden gestionar su web. Entran con su cuenta de Google."
   actor={actor}
   center={center}
   active="users"
@@ -69,7 +69,7 @@ const users = await listCenterUsers(center.id);
 
   <form method="post" class={`${cardClass} space-y-5`}>
     <div>
-      <h2 class="text-xl font-bold text-ink">Dar acceso a otra persona</h2>
+      <h2 class="text-xl font-bold text-ink">Dar acceso a otra encargada</h2>
       <p class="mt-1 text-base text-muted">Podrá entrar al panel de este centro con la cuenta de Google de ese correo.</p>
     </div>
     <div>
