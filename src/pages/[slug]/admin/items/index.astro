@@ -57,7 +57,14 @@ const statusChip = (status: string, raised: number, goal: number) => {
             const chip = statusChip(item.status, item.raised, item.goal);
             return (
               <tr>
-                <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">{item.name}</td>
+                <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">
+                  <span class="flex items-center gap-3 max-md:flex-row-reverse">
+                    {item.imageUrl
+                      ? <img src={item.imageUrl} alt="" class="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
+                      : <span class="h-12 w-12 shrink-0 rounded-md border border-line bg-surface"></span>}
+                    <span>{item.name}</span>
+                  </span>
+                </td>
                 <td class={`${tdClass} tabular`} data-label="Recaudado">{formatEuro(item.raised)} de {formatEuro(item.goal)}</td>
                 <td class={tdClass} data-label="En la web"><span class={chipClass[chip.tone]}>{chip.label}</span></td>
                 <td class={`${tdClass} tabular`} data-label="Posición">{shownPosition.get(item.id) ?? '-'}</td>
@@ -74,8 +81,12 @@ const statusChip = (status: string, raised: number, goal: number) => {
     )}
   </div>
 
-  <form method="post" class={`${cardClass} space-y-5`}>
-    <h2 class="text-xl font-bold text-ink">Nuevo artículo</h2>
+  <details class={`${cardClass} group`} open={items.length === 0 || Astro.url.searchParams.has('error')}>
+    <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-xl font-bold text-ink">
+      Añadir un artículo nuevo
+      <span class="text-base font-semibold text-brand group-open:hidden">Abrir formulario</span>
+    </summary>
+  <form method="post" class="mt-5 space-y-5">
     <div>
       <label class={labelClass} for="name">Nombre del artículo</label>
       <input id="name" name="name" class={inputClass} maxlength="120" required />
@@ -113,4 +124,5 @@ const statusChip = (status: string, raised: number, goal: number) => {
       <button type="submit" class={buttonClass}>Crear artículo</button>
     </div>
   </form>
+  </details>
 </AdminLayout>
