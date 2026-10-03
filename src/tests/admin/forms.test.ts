@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  END_OF_LIST,
   parseAppearance,
   parseEmail,
+  parseImageUrl,
   parseItem,
   parseManualDonation,
   parseNewCenter,
@@ -84,9 +86,9 @@ describe('parseItem', () => {
     });
   });
 
-  it('defaults the sort order to 0', () => {
+  it('puts the item at the end of the list when no position is given', () => {
     const result = parseItem(form({ ...valid, sort_order: '' }), 'recoletos');
-    expect(result.ok && result.value.sortOrder).toBe(0);
+    expect(result.ok && result.value.sortOrder).toBe(END_OF_LIST);
   });
 
   it('canonicalizes a URL with special characters in image', () => {
@@ -169,5 +171,20 @@ describe('parseNewCenter', () => {
     { slug: 'valido', name: '' },
   ])('rejects %j', (fields) => {
     expect(parseNewCenter(form(fields)).ok).toBe(false);
+  });
+});
+
+describe('parseImageUrl', () => {
+  it('accepts a blob URL of the same center', () => {
+    const result = parseImageUrl(form({ image_url: 'https://abc.public.blob.vercel-storage.com/recoletos/a.webp' }), 'recoletos');
+    expect(result).toEqual({ ok: true, value: 'https://abc.public.blob.vercel-storage.com/recoletos/a.webp' });
+  });
+
+  it.each([
+    ['empty value', ''],
+    ['other center', 'https://abc.public.blob.vercel-storage.com/otro/a.webp'],
+    ['foreign host', 'https://evil.example.com/recoletos/a.webp'],
+  ])('rejects %s', (_label, value) => {
+    expect(parseImageUrl(form({ image_url: value }), 'recoletos').ok).toBe(false);
   });
 });
