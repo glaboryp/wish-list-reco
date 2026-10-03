@@ -25,7 +25,7 @@ test.describe('admin access control', () => {
 
     test('the home page links to the login page', async ({ page }) => {
         await page.goto('/');
-        await page.getByRole('link', { name: 'Acceso para encargados' }).click();
+        await page.getByRole('link', { name: 'Acceso para encargadas' }).click();
         await expect(page).toHaveURL(/\/login$/);
     });
 

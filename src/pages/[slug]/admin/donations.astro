@@ -28,11 +28,20 @@ if (Astro.request.method === 'POST') {
   const parsed = parseManualDonation(form);
   if (!parsed.ok) return fail(parsed.error);
   const created = await addManualDonation({ centerId: center.id, ...parsed.value });
-  if (!created) return fail('El artículo no existe en este centro');
+  if (created.status === 'missing') return fail('El artículo no existe en este centro');
+  if (created.status === 'too_much') {
+    return fail(created.remaining > 0
+      ? `Solo faltan ${formatEuro(created.remaining)} para completar este artículo. Apunta como máximo esa cantidad`
+      : 'Este artículo ya tiene todo el dinero reunido, no se puede apuntar más');
+  }
   return Astro.redirect(`${here}?ok=donation-added`, 303);
 }
 
 const [donations, items] = await Promise.all([listDonations(center.id), listAdminItems(center.id)]);
+const payable = items
+  .filter((item) => item.status !== 'archived')
+  .map((item) => ({ item, remaining: Math.round((item.goal - item.raised) * 100) / 100 }))
+  .filter(({ remaining }) => remaining > 0);
 const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 ---
 
@@ -48,29 +57,40 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
       <h2 class="text-xl font-bold text-ink">Añadir una donación recibida fuera de la web</h2>
       <p class="mt-1 text-base text-muted">Se suma al total del artículo que elijas, igual que una donación de PayPal.</p>
     </div>
-    <div class="grid gap-5 sm:grid-cols-3">
-      <div>
-        <label class={labelClass} for="item_id">Artículo al que se destina</label>
-        <select id="item_id" name="item_id" class={inputClass} required>
-          {items.filter((item) => item.status !== 'archived').map((item) => (
-            <option value={item.id}>{item.name}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label class={labelClass} for="amount">Importe (€)</label>
-        <input id="amount" name="amount" class={inputClass} inputmode="decimal" required />
-        <p class={helpClass}>Por ejemplo: 20,50.</p>
-      </div>
-      <div>
-        <label class={labelClass} for="note">Nota (opcional)</label>
-        <input id="note" name="note" class={inputClass} maxlength="200" />
-        <p class={helpClass}>Por ejemplo: «entregado en mano».</p>
-      </div>
-    </div>
-    <div class={formFooterClass}>
-      <button type="submit" class={buttonClass}>Añadir donación</button>
-    </div>
+    {payable.length === 0 ? (
+      <p class="rounded-lg bg-surface px-4 py-3 text-base text-muted">
+        Ahora mismo no hay ningún artículo al que apuntar dinero: todos tienen ya lo que necesitan o no hay artículos.
+      </p>
+    ) : (
+      <>
+        <div class="grid gap-5 sm:grid-cols-3">
+          <div>
+            <label class={labelClass} for="item_id">Artículo al que se destina</label>
+            <select id="item_id" name="item_id" class={inputClass} required>
+              {payable.map(({ item, remaining }) => (
+                <option value={item.id} data-remaining={remaining}>{item.name} (faltan {formatEuro(remaining)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class={labelClass} for="amount">Importe (€)</label>
+            <input id="amount" name="amount" class={inputClass} inputmode="decimal" required aria-describedby="amount-hint" />
+            <p class={helpClass} id="amount-hint">
+              Máximo: <strong data-max-label></strong>, lo que falta por reunir de este artículo.
+              <button type="button" data-fill-max class="ml-1 font-semibold text-brand underline-offset-4 hover:underline">Poner todo lo que falta</button>
+            </p>
+          </div>
+          <div>
+            <label class={labelClass} for="note">Nota (opcional)</label>
+            <input id="note" name="note" class={inputClass} maxlength="200" />
+            <p class={helpClass}>Por ejemplo: «efectivo» o «bizum».</p>
+          </div>
+        </div>
+        <div class={formFooterClass}>
+          <button type="submit" class={buttonClass}>Añadir donación</button>
+        </div>
+      </>
+    )}
   </form>
 
   <div class={cardClass}>
@@ -119,3 +139,32 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
     )}
   </div>
 </AdminLayout>
+
+<script>
+  const select = document.getElementById('item_id') as HTMLSelectElement | null;
+  const amount = document.getElementById('amount') as HTMLInputElement | null;
+  const maxLabel = document.querySelector<HTMLElement>('[data-max-label]');
+  const fillMax = document.querySelector<HTMLButtonElement>('[data-fill-max]');
+  const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+
+  if (select && amount && maxLabel && fillMax) {
+    const remaining = () => Number(select.selectedOptions[0]?.dataset.remaining ?? 0);
+    const refresh = () => {
+      maxLabel.textContent = euro.format(remaining());
+      validate();
+    };
+    const validate = () => {
+      const value = Number(amount.value.replace(',', '.'));
+      const tooMuch = amount.value.trim() !== '' && Number.isFinite(value) && value > remaining() + 0.001;
+      amount.setCustomValidity(tooMuch ? `Como máximo ${euro.format(remaining())}, que es lo que falta por reunir` : '');
+    };
+    select.addEventListener('change', refresh);
+    amount.addEventListener('input', validate);
+    fillMax.addEventListener('click', () => {
+      amount.value = remaining().toFixed(2).replace('.', ',');
+      validate();
+      amount.focus();
+    });
+    refresh();
+  }
+</script>

@@ -5,6 +5,7 @@ import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputCla
 import { parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { formatEuro } from "../../../../lib/format";
+import { positionOptions } from "../../../../lib/admin/positions";
 import { createItem, listAdminItems } from "../../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
@@ -20,6 +21,8 @@ if (Astro.request.method === 'POST') {
 }
 
 const items = await listAdminItems(center.id);
+const positions = positionOptions(items);
+const shownPosition = new Map(items.filter((item) => item.status !== 'archived').map((item, index) => [item.id, index + 1]));
 
 const statusChip = (status: string, raised: number, goal: number) => {
   if (status === 'archived') return { label: 'Archivado', tone: 'muted' as const };
@@ -57,7 +60,7 @@ const statusChip = (status: string, raised: number, goal: number) => {
                 <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">{item.name}</td>
                 <td class={`${tdClass} tabular`} data-label="Recaudado">{formatEuro(item.raised)} de {formatEuro(item.goal)}</td>
                 <td class={tdClass} data-label="En la web"><span class={chipClass[chip.tone]}>{chip.label}</span></td>
-                <td class={`${tdClass} tabular`} data-label="Posición">{item.sortOrder}</td>
+                <td class={`${tdClass} tabular`} data-label="Posición">{shownPosition.get(item.id) ?? '-'}</td>
                 <td class="py-2 text-right">
                   <a href={`${here}/${item.id}`} class={`${secondaryButtonClass} px-4!`}>
                     Editar<span class="sr-only"> {item.name}</span>
@@ -99,11 +102,13 @@ const statusChip = (status: string, raised: number, goal: number) => {
       </div>
       <div>
         <label class={labelClass} for="sort_order">Posición en la lista</label>
-        <input id="sort_order" name="sort_order" class={inputClass} inputmode="numeric" value="0" />
-        <p class={helpClass}>El número más bajo sale primero. Si dudas, déjalo en 0.</p>
+        <select id="sort_order" name="sort_order" class={inputClass}>
+          {positions.map((option) => <option value={option.value} selected={option.selected}>{option.label}</option>)}
+        </select>
+        <p class={helpClass}>Los demás artículos se mueven solos para dejarle sitio.</p>
       </div>
     </div>
-    <ImageUpload slug={center.slug} name="image_url" label="Imagen del artículo" help="Se muestra en la lista y en la ficha del artículo." />
+    <ImageUpload slug={center.slug} name="image_url" label="Imagen de portada" help="La que se ve en la lista. Después podrás añadir más imágenes desde la ficha del artículo." />
     <div class={formFooterClass}>
       <button type="submit" class={buttonClass}>Crear artículo</button>
     </div>

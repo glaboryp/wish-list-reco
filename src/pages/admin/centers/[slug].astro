@@ -58,7 +58,7 @@ if (Astro.request.method === 'POST') {
       Todos los centros
     </a>
     <a href={`/${center.slug}/admin`} class={linkClass}>Abrir su panel</a>
-    <a href={`/${center.slug}/admin/users`} class={linkClass}>Encargados</a>
+    <a href={`/${center.slug}/admin/users`} class={linkClass}>Encargadas</a>
   </div>
 
   <form method="post" class={`${cardClass} space-y-5`}>
@@ -112,7 +112,7 @@ if (Astro.request.method === 'POST') {
   <form method="post" class={`${cardClass} space-y-5`}>
     <input type="hidden" name="intent" value="add_user" />
     <div>
-      <h2 class="text-xl font-bold text-ink">Dar acceso a un encargado</h2>
+      <h2 class="text-xl font-bold text-ink">Dar acceso a una encargada</h2>
       <p class="mt-1 text-base text-muted">Podrá entrar al panel de este centro con la cuenta de Google de ese correo.</p>
     </div>
     <div>

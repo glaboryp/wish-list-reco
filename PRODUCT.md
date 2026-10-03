@@ -9,12 +9,12 @@ web
 ## Users
 
 - **Donantes**: familias, antiguos alumnos y público general que llegan a la página de un centro (casi siempre desde el móvil), eligen un artículo de su lista de deseos y donan con PayPal. No conocen la plataforma y no deben necesitar explicación.
-- **Encargados de centro**: personal no técnico de cada centro. Gestionan su propia web (portada, artículos, donaciones manuales, otros encargados) desde móvil o PC, de forma ocasional. No saben qué es un "alt text" o un "slug".
+- **Encargadas de centro**: personal no técnico de cada centro (siempre mujeres, usar el femenino). Gestionan su propia web (portada, artículos, donaciones manuales, otras encargadas) desde móvil o PC, de forma ocasional. No saben qué es un "alt text" o un "slug".
 - **Administradora de la plataforma** (superadmin): una persona técnica que da de alta centros, configura PayPal y gestiona accesos.
 
 ## Product Purpose
 
-Cada centro social o educativo (el primero es Recoletos) publica su propia lista de deseos con lo que necesita y recibe donaciones por artículo. La plataforma es multicentro: `/` lista los centros, `/{slug}` es la web de cada centro, `/{slug}/admin` su panel y `/admin` el panel de la administradora. Éxito: un donante completa una donación sin dudas y un encargado mantiene su web sin ayuda.
+Cada centro social o educativo (el primero es Recoletos) publica su propia lista de deseos con lo que necesita y recibe donaciones por artículo. La plataforma es multicentro: `/` lista los centros, `/{slug}` es la web de cada centro, `/{slug}/admin` su panel y `/admin` el panel de la administradora. Éxito: un donante completa una donación sin dudas y una encargada mantiene su web sin ayuda.
 
 ## Positioning
 
@@ -22,7 +22,7 @@ Donación directa a necesidades concretas y visibles de un centro concreto, con 
 
 ## Operating Context
 
-- Los encargados entran con su cuenta de Google (Firebase Auth); el acceso lo da la administradora por correo.
+- Las encargadas entran con su cuenta de Google (Firebase Auth); el acceso lo da la administradora por correo.
 - Pagos con PayPal por centro, con credenciales propias (sandbox o live). Las donaciones también pueden registrarse a mano (efectivo, transferencia).
 - Desplegado en Vercel con Astro y Neon (Postgres). Contenido en español.
 - El dominio antiguo redirige de forma permanente a la web del centro Recoletos.
@@ -44,7 +44,7 @@ Donación directa a necesidades concretas y visibles de un centro concreto, con 
 ## Evidence on Hand
 
 - Un centro real (Recoletos) con logo, portada y artículos. No hay testimonios, cifras ni logos de terceros; no inventarlos.
-- Contacto de soporte para encargados: glabory@gmail.com.
+- Contacto de soporte para encargadas: glabory@gmail.com.
 
 ## Product Principles
 

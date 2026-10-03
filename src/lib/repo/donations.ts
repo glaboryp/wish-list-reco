@@ -20,19 +20,33 @@ export async function recordPaypalDonation(input: {
   return existing.length > 0 ? 'duplicate' : 'item_not_found';
 }
 
+export type ManualDonationResult =
+  | { status: 'created' }
+  | { status: 'missing' }
+  | { status: 'too_much'; remaining: number };
+
 export async function addManualDonation(input: {
   centerId: string;
   itemId: string;
   amount: number;
   note: string;
-}): Promise<boolean> {
+}): Promise<ManualDonationResult> {
   const rows = await sql`
     INSERT INTO donations (center_id, item_id, amount, currency, source, note)
-    SELECT ${input.centerId}, id, ${input.amount}, 'EUR', 'manual', ${input.note}
-    FROM items WHERE id = ${input.itemId} AND center_id = ${input.centerId}
+    SELECT ${input.centerId}, i.id, ${input.amount}, 'EUR', 'manual', ${input.note}
+    FROM items i
+    WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
+      AND ${input.amount}::numeric <= i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0)
     RETURNING id
   `;
-  return rows.length > 0;
+  if (rows.length > 0) return { status: 'created' };
+
+  const item = await sql`
+    SELECT GREATEST(i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0), 0) AS remaining
+    FROM items i WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
+  `;
+  if (item.length === 0) return { status: 'missing' };
+  return { status: 'too_much', remaining: parseFloat(item[0].remaining) };
 }
 
 export async function voidManualDonation(centerId: string, donationId: string): Promise<boolean> {

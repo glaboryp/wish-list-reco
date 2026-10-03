@@ -83,26 +83,41 @@ export async function getAdminItem(centerId: string, itemId: string): Promise<Ad
   return rows.length > 0 ? toAdminItem(rows[0]) : null;
 }
 
-async function setMainImage(centerId: string, itemId: string, url: string): Promise<void> {
+export const MAX_ITEM_IMAGES = 10;
+
+async function placeItem(centerId: string, itemId: string, position: number): Promise<void> {
   await sql`
-    WITH removed AS (
-      DELETE FROM item_images
-      WHERE item_id = ${itemId} AND sort_order = 0
-        AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
+    WITH others AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, created_at ASC, id ASC) AS rn
+      FROM items
+      WHERE center_id = ${centerId} AND status <> 'archived' AND id <> ${itemId}
+    ),
+    target AS (
+      SELECT GREATEST(1, LEAST(${position}::int, (SELECT COUNT(*) FROM others) + 1)) AS pos
+    ),
+    placed AS (
+      SELECT o.id, CASE WHEN o.rn >= (SELECT pos FROM target) THEN o.rn + 1 ELSE o.rn END AS pos FROM others o
+      UNION ALL
+      SELECT ${itemId}::uuid, (SELECT pos FROM target)
+    ),
+    final AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY pos ASC) AS new_pos FROM placed
     )
-    INSERT INTO item_images (item_id, image_url, sort_order)
-    SELECT id, ${url}, 0 FROM items WHERE id = ${itemId} AND center_id = ${centerId}
+    UPDATE items SET sort_order = final.new_pos::int
+    FROM final
+    WHERE items.id = final.id AND items.center_id = ${centerId}
   `;
 }
 
 export async function createItem(centerId: string, input: ItemInput): Promise<string> {
   const rows = await sql`
     INSERT INTO items (center_id, name, description, goal_amount, status, sort_order)
-    VALUES (${centerId}, ${input.name}, ${input.description}, ${input.goal}, ${input.status === 'archived' ? 'draft' : input.status}, ${input.sortOrder})
+    VALUES (${centerId}, ${input.name}, ${input.description}, ${input.goal}, ${input.status === 'archived' ? 'draft' : input.status}, 0)
     RETURNING id
   `;
   const id = rows[0].id as string;
-  if (input.imageUrl) await setMainImage(centerId, id, input.imageUrl);
+  await placeItem(centerId, id, input.sortOrder);
+  if (input.imageUrl) await addItemImage(centerId, id, input.imageUrl);
   return id;
 }
 
@@ -113,13 +128,73 @@ export async function updateItem(centerId: string, itemId: string, input: ItemIn
       description = ${input.description},
       goal_amount = ${input.goal},
       status = CASE WHEN ${input.status}::item_status = 'archived' AND items.status <> 'archived' THEN items.status ELSE ${input.status}::item_status END,
-      sort_order = ${input.sortOrder},
       updated_at = NOW()
     WHERE id = ${itemId} AND center_id = ${centerId}
+    RETURNING id, status
+  `;
+  if (rows.length === 0) return false;
+  if (rows[0].status !== 'archived') await placeItem(centerId, itemId, input.sortOrder);
+  return true;
+}
+
+export async function listItemImages(centerId: string, itemId: string): Promise<DBItemImage[]> {
+  const rows = await sql`
+    SELECT img.id, img.item_id, img.image_url, img.alt_text, img.sort_order, img.created_at
+    FROM item_images img JOIN items i ON i.id = img.item_id
+    WHERE img.item_id = ${itemId} AND i.center_id = ${centerId}
+    ORDER BY img.sort_order ASC, img.created_at ASC, img.id ASC
+  `;
+  return rows as DBItemImage[];
+}
+
+async function resequenceImages(itemId: string, firstId: string | null): Promise<void> {
+  await sql`
+    WITH ranked AS (
+      SELECT id, ROW_NUMBER() OVER (
+        ORDER BY (id = ${firstId}::uuid) DESC, sort_order ASC, created_at ASC, id ASC
+      ) - 1 AS pos
+      FROM item_images WHERE item_id = ${itemId}
+    )
+    UPDATE item_images SET sort_order = ranked.pos::int FROM ranked WHERE item_images.id = ranked.id
+  `;
+}
+
+export async function addItemImage(centerId: string, itemId: string, url: string): Promise<'added' | 'full' | 'missing'> {
+  const rows = await sql`
+    INSERT INTO item_images (item_id, image_url, sort_order)
+    SELECT i.id, ${url}, COALESCE((SELECT MAX(sort_order) + 1 FROM item_images WHERE item_id = i.id), 0)
+    FROM items i
+    WHERE i.id = ${itemId} AND i.center_id = ${centerId}
+      AND (SELECT COUNT(*) FROM item_images WHERE item_id = i.id) < ${MAX_ITEM_IMAGES}
+    RETURNING id
+  `;
+  if (rows.length > 0) {
+    await resequenceImages(itemId, null);
+    return 'added';
+  }
+  const exists = await sql`SELECT 1 AS ok FROM items WHERE id = ${itemId} AND center_id = ${centerId}`;
+  return exists.length > 0 ? 'full' : 'missing';
+}
+
+export async function removeItemImage(centerId: string, itemId: string, imageId: string): Promise<boolean> {
+  const rows = await sql`
+    DELETE FROM item_images
+    WHERE id = ${imageId} AND item_id = ${itemId}
+      AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
     RETURNING id
   `;
   if (rows.length === 0) return false;
-  if (input.imageUrl) await setMainImage(centerId, itemId, input.imageUrl);
+  await resequenceImages(itemId, null);
+  return true;
+}
+
+export async function setCoverImage(centerId: string, itemId: string, imageId: string): Promise<boolean> {
+  const found = await sql`
+    SELECT 1 AS ok FROM item_images img JOIN items i ON i.id = img.item_id
+    WHERE img.id = ${imageId} AND img.item_id = ${itemId} AND i.center_id = ${centerId}
+  `;
+  if (found.length === 0) return false;
+  await resequenceImages(itemId, imageId);
   return true;
 }
 
