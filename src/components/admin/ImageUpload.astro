@@ -8,13 +8,14 @@ interface Props {
   label: string;
   help?: string;
   current?: string | null;
+  requireUpload?: boolean;
 }
 
-const { slug, name, label, help, current = null } = Astro.props;
+const { slug, name, label, help, current = null, requireUpload = false } = Astro.props;
 const inputId = `upload-${name}`;
 ---
 
-<div data-upload data-slug={slug}>
+<div data-upload data-slug={slug} data-require={requireUpload ? 'true' : undefined}>
   <p class={labelClass} id={`${inputId}-label`}>{label}</p>
   {help && <p class={`${helpClass} -mt-1 mb-3`}>{help}</p>}
   <div class="flex flex-wrap items-center gap-4">
@@ -46,8 +47,12 @@ const inputId = `upload-${name}`;
     const placeholder = root.querySelector<HTMLElement>('[data-placeholder]')!;
     const buttonText = root.querySelector<HTMLElement>('[data-button-text]')!;
     const slug = root.dataset.slug!;
+    const required = root.dataset.require === 'true';
     const submitButtons = () =>
       Array.from(file.form?.querySelectorAll<HTMLButtonElement>('button[type="submit"]') ?? []);
+
+    const syncSubmit = () => submitButtons().forEach((button) => (button.disabled = required && !hidden.value));
+    syncSubmit();
 
     const show = (message: string, tone: 'info' | 'ok' | 'error') => {
       status.hidden = false;
@@ -78,7 +83,7 @@ const inputId = `upload-${name}`;
         hidden.value = '';
         show('No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
-        submitButtons().forEach((button) => (button.disabled = false));
+        syncSubmit();
       }
     });
   });
