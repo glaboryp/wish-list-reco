@@ -81,6 +81,10 @@ Sobrio, claro y de confianza. Lo importante es que cualquier persona no técnica
 - **Líneas** (`line` para separadores, `line-strong` para bordes de controles, que superan 3:1).
 - **Color de centro** (`center-primary`): variable `--primary` en la web pública de cada centro, elegida por la encargada y validada para contraste con texto blanco. En el panel solo aparece en la vista previa.
 
+## Public pages
+
+La web pública de cada centro (portada y artículo) usa los mismos tokens neutros (tinta, líneas, superficie, radios y sombras) y el color del centro (`--primary`) para el botón de donar, la barra de progreso, el foco y la portada sin foto. El flujo de donación se ve solo en la página del artículo: importes sugeridos, una línea de confianza junto a los botones de pago y un mensaje de gracias al terminar. Los botones de PayPal son los oficiales, en negro, y no admiten otro color.
+
 ## Typography
 
 Atkinson Hyperlegible Next, autoalojada. Jerarquía por tamaño y peso, sin segunda familia. Texto base de 16px, etiquetas en 600, importes con cifras tabulares (`.tabular`). Los títulos de página usan 2xl a 3xl en el panel y 4xl a 5xl en el inicio.

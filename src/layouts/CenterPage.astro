@@ -26,8 +26,14 @@ const hover = darken(color, 0.2);
       <script src={`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=EUR&intent=capture&disable-funding=paylater&components=buttons`} data-sdk-integration-source="astro" data-namespace="paypal"></script>
     )}
   </head>
-  <body class="antialiased" style={`--primary: ${color}; --primary-hover: ${hover};`}>
+  <body class="antialiased" style={`--primary: ${color}; --primary-hover: ${hover}; --focus: ${color};`}>
     <slot />
+    <footer class="border-t border-line">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 text-sm text-muted">
+        <p>Listas de deseos</p>
+        <a href="/" class="inline-flex min-h-11 items-center underline-offset-4 hover:text-ink hover:underline">Ver otros centros</a>
+      </div>
+    </footer>
     <Analytics />
     <SpeedInsights />
   </body>

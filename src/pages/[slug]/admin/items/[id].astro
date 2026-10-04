@@ -63,7 +63,7 @@ const positions = positionOptions(allItems, item.id);
 
 <AdminLayout title={item.name} actor={actor} center={center} active="items">
   <div class="space-y-1">
-    <a href={listUrl} class={`${linkClass} inline-flex items-center gap-1.5`}>
+    <a href={listUrl} class={`${linkClass} inline-flex min-h-11 items-center gap-1.5`}>
       <Icon name="arrow-left" class="h-4 w-4" />
       Volver a los artículos
     </a>
@@ -122,7 +122,7 @@ const positions = positionOptions(allItems, item.id);
     <div>
       <h2 class="text-xl font-bold text-ink">Imágenes del artículo</h2>
       <p class="mt-1 text-base text-muted">
-        La primera es la portada: la que se ve en la lista. Las demás se ven al abrir el artículo. Puedes tener hasta {MAX_ITEM_IMAGES}.
+        La primera es la portada: la que se ve en la lista. Las demás se ven al abrir el artículo. Puedes tener hasta {MAX_ITEM_IMAGES}. Los cambios de imágenes se guardan al momento, sin pulsar «Guardar cambios».
       </p>
     </div>
     {images.length === 0 ? (

@@ -1,7 +1,7 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import Icon from "../../../components/Icon.astro";
-import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass, linkClass } from "../../../components/admin/ui";
+import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass, linkClass, secondaryButtonClass } from "../../../components/admin/ui";
 import { parseEmail, parsePaypal } from "../../../lib/admin/forms";
 import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
@@ -53,12 +53,12 @@ if (Astro.request.method === 'POST') {
 
 <AdminLayout title={`Ajustes de ${center.name}`} actor={actor} active="centers">
   <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-    <a href="/admin" class={`${linkClass} inline-flex items-center gap-1.5`}>
+    <a href="/admin" class={`${linkClass} inline-flex min-h-11 items-center gap-1.5`}>
       <Icon name="arrow-left" class="h-4 w-4" />
       Todos los centros
     </a>
-    <a href={`/${center.slug}/admin`} class={linkClass}>Abrir su panel</a>
-    <a href={`/${center.slug}/admin/users`} class={linkClass}>Encargadas</a>
+    <a href={`/${center.slug}/admin`} class={`${secondaryButtonClass} px-4!`}>Abrir su panel</a>
+    <a href={`/${center.slug}/admin/users`} class={`${secondaryButtonClass} px-4!`}>Encargadas</a>
   </div>
 
   <form method="post" class={`${cardClass} space-y-5`}>
@@ -66,7 +66,7 @@ if (Astro.request.method === 'POST') {
     <div>
       <h2 class="text-xl font-bold text-ink">PayPal</h2>
       <p class="mt-1 text-base text-muted">
-        Con estos datos el centro recibe sus donaciones. Los copias de la aplicación del centro en developer.paypal.com.
+        Con estos datos el centro recibe sus donaciones. Se copian de la aplicación del centro en developer.paypal.com.
         Ahora mismo: <strong>{center.paypal_configured ? `configurado (${center.paypal_env === 'live' ? 'dinero real' : 'pruebas'})` : 'sin configurar'}</strong>.
       </p>
     </div>
