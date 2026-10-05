@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { amountWithFees, parsePaymentSource } from '../../../../lib/fees';
+import { DEFAULT_FEE_SCHEDULE, amountWithFees, parsePaymentSource } from '../../../../lib/fees';
 import { isUuid } from '../../../../lib/ids';
 import { createOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
@@ -55,7 +55,7 @@ export const POST: APIRoute = async ({ params, request }) => {
 
     let purchaseAmount = donationAmount;
     if (coverFees) {
-      purchaseAmount = amountWithFees(donationAmount, parsePaymentSource(paymentSource));
+      purchaseAmount = amountWithFees(donationAmount, parsePaymentSource(paymentSource), center.fees ?? DEFAULT_FEE_SCHEDULE);
     }
 
     const id = await createOrder(credentials, {

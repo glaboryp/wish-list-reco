@@ -2,7 +2,7 @@ import { isCenterBlobUrl } from '../blob';
 import { isValidPrimaryColor } from '../color';
 import { isUuid } from '../ids';
 import { validateSlug } from '../slug';
-import type { AppearanceInput, ItemInput, PayPalEnv } from '../../types/database';
+import type { AppearanceInput, FeeSettingsInput, ItemInput, PayPalEnv } from '../../types/database';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -131,6 +131,29 @@ export function parsePaypal(form: FormData): Parsed<PayPalFormInput> {
   if (secret !== '' && !/^\S{1,300}$/.test(secret)) return fail('El secret de PayPal no es válido');
 
   return { ok: true, value: { clientId, env, secret: secret === '' ? null : secret } };
+}
+
+const FEE_PATTERN = /^\d{1,2}([.,]\d{1,2})?$/;
+
+function feeValue(form: FormData, name: string, max: number): number | null {
+  const raw = text(form, name);
+  if (!FEE_PATTERN.test(raw)) return null;
+  const value = Number(raw.replace(',', '.'));
+  return value >= 0 && value <= max ? value : null;
+}
+
+export function parseFees(form: FormData): Parsed<FeeSettingsInput> {
+  const paypalPercent = feeValue(form, 'paypal_percent', 20);
+  const cardPercent = feeValue(form, 'card_percent', 20);
+  if (paypalPercent === null || cardPercent === null) {
+    return fail('El porcentaje debe ser un número entre 0 y 20, por ejemplo 2,9');
+  }
+  const paypalFixed = feeValue(form, 'paypal_fixed', 5);
+  const cardFixed = feeValue(form, 'card_fixed', 5);
+  if (paypalFixed === null || cardFixed === null) {
+    return fail('La cuota fija debe ser un importe entre 0 y 5 euros, por ejemplo 0,35');
+  }
+  return { ok: true, value: { paypalPercent, paypalFixed, cardPercent, cardFixed } };
 }
 
 export function parseNewCenter(form: FormData): Parsed<{ slug: string; name: string }> {

@@ -1,6 +1,6 @@
 ---
 import Icon from "./Icon.astro";
-import { FEE_SCHEDULE } from "../lib/fees";
+import { DEFAULT_FEE_SCHEDULE, type FeeSchedule } from "../lib/fees";
 
 interface Props {
   itemId: string;
@@ -9,9 +9,10 @@ interface Props {
   centerName?: string;
   maxDonation: number;
   isDetailPage?: boolean;
+  feeSchedule?: FeeSchedule;
 }
 
-const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false } = Astro.props;
+const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false, feeSchedule = DEFAULT_FEE_SCHEDULE } = Astro.props;
 
 const inputId = `amount-${itemId}`;
 const buttonId = `paypal-button-${itemId}`;
@@ -141,7 +142,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
     slug,
     maxDonation,
     isDetailPage,
-    feeSchedule: FEE_SCHEDULE,
+    feeSchedule,
   }}
 >
   // Aviso breve: abajo en móvil y abajo a la derecha en pantallas grandes

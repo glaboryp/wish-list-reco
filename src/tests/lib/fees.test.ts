@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { amountWithFees, parsePaymentSource } from '../../lib/fees';
+import { DEFAULT_FEE_SCHEDULE, amountWithFees, feeScheduleFromRow, parsePaymentSource } from '../../lib/fees';
 
 describe('amountWithFees', () => {
   it.each([
@@ -20,6 +20,25 @@ describe('amountWithFees', () => {
         expect(Math.abs(total - (total * rate + fixed) - net)).toBeLessThan(0.01);
       }
     }
+  });
+});
+
+describe('amountWithFees with a custom schedule', () => {
+  it('uses the rates of the center', () => {
+    const schedule = { ...DEFAULT_FEE_SCHEDULE, card: { rate: 0.029, fixed: 0.35 } };
+    expect(amountWithFees(10, 'card', schedule)).toBe(10.66);
+    expect(amountWithFees(10, 'paypal', schedule)).toBe(10.66);
+  });
+});
+
+describe('feeScheduleFromRow', () => {
+  it('converts the stored percentages into rates', () => {
+    const schedule = feeScheduleFromRow({ paypal_fee_percent: '2.90', paypal_fee_fixed: '0.35', card_fee_percent: '1.20', card_fee_fixed: '0.35' });
+    expect(schedule).toEqual({ paypal: { rate: 0.029, fixed: 0.35 }, card: { rate: 0.012, fixed: 0.35 } });
+  });
+
+  it('falls back to the defaults when the columns are missing', () => {
+    expect(feeScheduleFromRow({})).toEqual(DEFAULT_FEE_SCHEDULE);
   });
 });
 
