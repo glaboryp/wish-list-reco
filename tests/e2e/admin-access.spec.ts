@@ -91,3 +91,43 @@ test.describe('admin access control', () => {
         expect(unknown.status()).toBe(404);
     });
 });
+
+test.describe('manager removing themselves', () => {
+    test('asks for a clear confirmation and ends on a readable page, not a bare 403', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/users');
+
+        const own = page.locator('tr', { hasText: 'manager@example.org' });
+        const other = page.locator('tr', { hasText: 'second@example.org' });
+        await expect(own.getByRole('button', { name: 'Dejar de ser encargada' })).toBeVisible();
+        await expect(other.getByRole('button', { name: 'Quitar acceso' })).toBeVisible();
+
+        let message = '';
+        page.once('dialog', (dialog) => {
+            message = dialog.message();
+            dialog.dismiss();
+        });
+        await own.getByRole('button', { name: 'Dejar de ser encargada' }).click();
+        expect(message).toContain('Te quedarás sin acceso');
+        await expect(page).toHaveURL(/\/admin\/users$/);
+
+        page.once('dialog', (dialog) => dialog.accept());
+        await own.getByRole('button', { name: 'Dejar de ser encargada' }).click();
+        await expect(page).toHaveURL(/\/\?left=recoletos$/);
+        await expect(page.getByRole('status')).toContainText('Has dejado de ser encargada de Recoletos');
+    });
+
+    test('the superadmin keeps the plain remove button and the forbidden page has a way out', async ({ page, context }) => {
+        await signIn(context, 'boss@example.org');
+        await page.goto('/recoletos/admin/users');
+        await expect(page.getByRole('button', { name: 'Dejar de ser encargada' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Quitar acceso' })).toHaveCount(2);
+
+        await context.clearCookies();
+        await signIn(context, 'stranger@example.org');
+        const response = await page.goto('/recoletos/admin');
+        expect(response?.status()).toBe(403);
+        await expect(page.getByRole('heading', { name: 'No tienes acceso a esta página' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Volver a la portada' })).toBeVisible();
+    });
+});

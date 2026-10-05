@@ -44,6 +44,14 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   if (text.includes('JOIN centers')) {
     return has(MANAGER_EMAIL) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
   }
+  if (text.includes('SELECT email, firebase_uid')) {
+    return has(RECOLETOS_ID)
+      ? [
+          { email: MANAGER_EMAIL, firebase_uid: 'uid-1', created_at: '2026-01-01T00:00:00Z' },
+          { email: 'second@example.org', firebase_uid: null, created_at: '2026-01-02T00:00:00Z' },
+        ]
+      : [];
+  }
   if (text.includes('FROM center_users')) {
     return has(RECOLETOS_ID) && has(MANAGER_EMAIL) ? [{ ok: 1 }] : [];
   }
