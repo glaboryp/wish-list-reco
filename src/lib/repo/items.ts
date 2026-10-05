@@ -50,6 +50,7 @@ function toAdminItem(row: any): AdminItem {
     imageUrl: row.image_url,
     imageAlt: row.alt_text,
     donationCount: Number(row.donation_count),
+    blockingDonationCount: Number(row.blocking_donation_count),
   };
 }
 
@@ -59,6 +60,7 @@ export async function listAdminItems(centerId: string): Promise<AdminItem[]> {
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id) AS donation_count,
+      (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id AND NOT (d.source = 'manual' AND d.voided_at IS NOT NULL)) AS blocking_donation_count,
       img.image_url, img.alt_text
     FROM items i
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
@@ -74,6 +76,7 @@ export async function getAdminItem(centerId: string, itemId: string): Promise<Ad
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id) AS donation_count,
+      (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id AND NOT (d.source = 'manual' AND d.voided_at IS NOT NULL)) AS blocking_donation_count,
       img.image_url, img.alt_text
     FROM items i
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
@@ -203,20 +206,30 @@ export async function removeOrArchiveItem(
   itemId: string,
 ): Promise<'deleted' | 'archived' | 'missing'> {
   const rows = await sql`
-    WITH has AS (
-      SELECT EXISTS (SELECT 1 FROM donations WHERE item_id = ${itemId} AND center_id = ${centerId}) AS yes
+    WITH blocked AS (
+      SELECT EXISTS (
+        SELECT 1 FROM donations
+        WHERE item_id = ${itemId} AND center_id = ${centerId}
+          AND NOT (source = 'manual' AND voided_at IS NOT NULL)
+      ) AS yes
+    ),
+    cleared AS (
+      DELETE FROM donations
+      WHERE item_id = ${itemId} AND center_id = ${centerId}
+        AND source = 'manual' AND voided_at IS NOT NULL AND NOT (SELECT yes FROM blocked)
+      RETURNING id
     ),
     del AS (
       DELETE FROM items
-      WHERE id = ${itemId} AND center_id = ${centerId} AND NOT (SELECT yes FROM has)
+      WHERE id = ${itemId} AND center_id = ${centerId} AND NOT (SELECT yes FROM blocked)
       RETURNING id
     ),
     arch AS (
       UPDATE items SET status = 'archived', updated_at = NOW()
-      WHERE id = ${itemId} AND center_id = ${centerId} AND (SELECT yes FROM has)
+      WHERE id = ${itemId} AND center_id = ${centerId} AND (SELECT yes FROM blocked)
       RETURNING id
     )
-    SELECT (SELECT COUNT(*) FROM del) AS deleted, (SELECT COUNT(*) FROM arch) AS archived
+    SELECT (SELECT COUNT(*) FROM del) AS deleted, (SELECT COUNT(*) FROM arch) AS archived, (SELECT COUNT(*) FROM cleared) AS cleared
   `;
   if (Number(rows[0].deleted) > 0) return 'deleted';
   if (Number(rows[0].archived) > 0) return 'archived';

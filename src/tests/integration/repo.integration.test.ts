@@ -112,6 +112,40 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await removeOrArchiveItem(centerA, fresh)).toBe('deleted');
   });
 
+  it('deletes an item whose only donations are voided manual ones, with those donations', async () => {
+    const id = await createItem(centerA, { ...itemInput, name: 'only-voided', sortOrder: 9100 });
+    await addManualDonation({ centerId: centerA, itemId: id, amount: 10, note: 'a' });
+    await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: 'b' });
+    expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 2 });
+
+    for (const row of await sql`SELECT id FROM donations WHERE item_id = ${id}`) {
+      await voidManualDonation(centerA, row.id);
+    }
+    expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 0 });
+
+    expect(await removeOrArchiveItem(centerA, id)).toBe('deleted');
+    expect(await getAdminItem(centerA, id)).toBeNull();
+    expect(await sql`SELECT 1 FROM donations WHERE item_id = ${id}`).toHaveLength(0);
+  });
+
+  it('archives instead of deleting when a manual donation is still valid or one came from PayPal', async () => {
+    const live = await createItem(centerA, { ...itemInput, name: 'one-live', sortOrder: 9101 });
+    await addManualDonation({ centerId: centerA, itemId: live, amount: 10, note: 'voided' });
+    await addManualDonation({ centerId: centerA, itemId: live, amount: 5, note: 'live' });
+    const first = await sql`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
+    await voidManualDonation(centerA, first[0].id);
+    expect(await removeOrArchiveItem(centerA, live)).toBe('archived');
+    expect(await getAdminItem(centerA, live)).toMatchObject({ status: 'archived', donationCount: 2, blockingDonationCount: 1 });
+
+    const paypal = await createItem(centerA, { ...itemInput, name: 'paypal', sortOrder: 9102 });
+    await recordPaypalDonation({ centerId: centerA, itemId: paypal, amount: '4.00', currency: 'EUR', captureId: `CAP-${suffix}-del` });
+    expect(await removeOrArchiveItem(centerA, paypal)).toBe('archived');
+    expect(await sql`SELECT 1 FROM donations WHERE item_id = ${paypal}`).toHaveLength(1);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${live}, ${paypal})`;
+    await sql`DELETE FROM items WHERE id IN (${live}, ${paypal})`;
+  });
+
   it('keeps the current image when an item is saved without a new one', async () => {
     const id = await createItem(centerA, { ...itemInput, imageUrl: 'https://x.public.blob.vercel-storage.com/a.png' });
     expect(await updateItem(centerA, id, { ...itemInput, name: 'Nuevo nombre' })).toBe(true);

@@ -23,6 +23,9 @@ if (Astro.request.method === 'POST') {
 const items = await listAdminItems(center.id);
 const positions = positionOptions(items);
 const shownPosition = new Map(items.filter((item) => item.status !== 'archived').map((item, index) => [item.id, index + 1]));
+const archivedCount = items.filter((item) => item.status === 'archived').length;
+const showArchived = Astro.url.searchParams.get('archived') === '1';
+const visibleItems = showArchived ? items : items.filter((item) => item.status !== 'archived');
 
 const statusChip = (status: string, raised: number, goal: number) => {
   if (status === 'archived') return { label: 'Archivado', tone: 'muted' as const };
@@ -39,8 +42,8 @@ const statusChip = (status: string, raised: number, goal: number) => {
   active="items"
 >
   <div class={cardClass}>
-    {items.length === 0 ? (
-      <p class="text-base text-muted">Todavía no hay artículos. Crea el primero con el formulario de más abajo.</p>
+    {visibleItems.length === 0 ? (
+      <p class="text-base text-muted">{items.length === 0 ? 'Todavía no hay artículos. Crea el primero con el formulario de más abajo.' : 'No hay artículos sin archivar.'}</p>
     ) : (
       <table class={tableClass}>
         <thead>
@@ -53,7 +56,7 @@ const statusChip = (status: string, raised: number, goal: number) => {
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const chip = statusChip(item.status, item.raised, item.goal);
             return (
               <tr>
@@ -78,6 +81,13 @@ const statusChip = (status: string, raised: number, goal: number) => {
           })}
         </tbody>
       </table>
+    )}
+    {archivedCount > 0 && (
+      <p class="mt-4 border-t border-line pt-4 text-base text-muted">
+        {showArchived
+          ? <a href={here} class="inline-flex min-h-11 items-center font-semibold text-brand underline-offset-4 hover:underline">Ocultar los archivados</a>
+          : <a href={`${here}?archived=1`} class="inline-flex min-h-11 items-center font-semibold text-brand underline-offset-4 hover:underline">Mostrar {archivedCount} {archivedCount === 1 ? 'artículo archivado' : 'artículos archivados'}</a>}
+      </p>
     )}
   </div>
 
