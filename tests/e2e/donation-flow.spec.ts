@@ -54,3 +54,29 @@ test('A non-uuid item id does not crash the page', async ({ request }) => {
     const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
     expect(response.status()).toBe(302);
 });
+
+test.describe('Mobile list view', () => {
+    test.use({ viewport: { width: 390, height: 800 } });
+
+    test('does not offer the amount or the fee checkbox, but the detail page does', async ({ page }) => {
+        await page.route('https://www.paypal.com/sdk/js*', (route) =>
+            route.fulfill({
+                contentType: 'application/javascript',
+                body: `window.paypal = {
+                    FUNDING: { PAYPAL: 'paypal', CARD: 'card' },
+                    Buttons: () => ({ render: () => Promise.resolve() }),
+                };`,
+            }),
+        );
+
+        await page.goto('/recoletos');
+        const first = page.locator('article').first();
+        await expect(first).toBeVisible();
+        await expect(first.locator('input[name="amount"]')).toBeHidden();
+        await expect(first.locator('input[type="checkbox"]')).toBeHidden();
+
+        await first.locator('a[href^="/recoletos/item/"]').first().click();
+        await expect(page.locator('input[name="amount"]')).toBeVisible();
+        await expect(page.locator('input[type="checkbox"]')).toBeVisible();
+    });
+});

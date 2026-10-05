@@ -58,7 +58,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
     </p>
   </div>
 
-  <div class="flex items-start gap-3">
+  <div class="flex items-start gap-3" id={`${inputId}-cover-fees-row`}>
     <input
       id={`${inputId}-cover-fees`}
       type="checkbox"
@@ -300,10 +300,17 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
         // Ocultar botones
         buttonsContainer.style.display = "none";
 
-        // Ocultar input, label y texto de ayuda
+        // Ocultar input, label, texto de ayuda, importes rápidos y comisiones
         amountInput.style.display = "none";
         if (labelContainer) labelContainer.style.display = "none";
         if (helpText) helpText.style.display = "none";
+        document
+          .getElementById(`${inputId}-cover-fees-row`)
+          ?.style.setProperty("display", "none");
+        feesSummary?.style.setProperty("display", "none");
+        document
+          .querySelector(`#${buttonId}-form [data-presets]`)
+          ?.style.setProperty("display", "none");
       }
 
       return; // No renderizar botones
