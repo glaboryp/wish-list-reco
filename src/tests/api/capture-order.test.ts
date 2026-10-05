@@ -13,7 +13,7 @@ vi.mock('../../lib/paypal', () => ({ credentialsFor, captureOrder }));
 
 import { POST } from '../../pages/api/[slug]/paypal/capture-order';
 
-const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1' };
+const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null };
 const center = { id: 'c1', slug: 'recoletos', status: 'active' };
 
 const call = (body: unknown, slug = 'recoletos') =>
@@ -59,9 +59,17 @@ describe('POST /api/[slug]/paypal/capture-order', () => {
       centerId: 'c1',
       itemId: 'item-1',
       amount: '12.00',
+      feeAmount: '0.00',
       currency: 'EUR',
       captureId: 'CAP1',
     });
+  });
+
+  it('credits only the donation when the donor covered the fees, and keeps the fee apart', async () => {
+    captureOrder.mockResolvedValue({ ...capture, amount: '10.66', donationAmount: '10.00' });
+    const response = await call({ orderID: 'O1' });
+    expect(await response.json()).toMatchObject({ ok: true, amount: '10.00', chargedAmount: '10.66' });
+    expect(recordPaypalDonation).toHaveBeenCalledWith(expect.objectContaining({ amount: '10.00', feeAmount: '0.66' }));
   });
 
   it('is idempotent when the capture was already recorded', async () => {

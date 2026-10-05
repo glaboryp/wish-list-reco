@@ -47,12 +47,16 @@ export const POST: APIRoute = async ({ params, request }) => {
     return json(failure, 500);
   }
 
+  const creditedAmount = capture.donationAmount ?? capture.amount;
+  const feeCents = Math.round(parseFloat(capture.amount) * 100) - Math.round(parseFloat(creditedAmount) * 100);
+
   let outcome;
   try {
     outcome = await recordPaypalDonation({
       centerId: center.id,
       itemId: capture.itemId,
-      amount: capture.amount,
+      amount: creditedAmount,
+      feeAmount: (feeCents / 100).toFixed(2),
       currency: capture.currency,
       captureId: capture.captureId,
     });
@@ -68,7 +72,8 @@ export const POST: APIRoute = async ({ params, request }) => {
 
   return json({
     ok: true,
-    amount: capture.amount,
+    amount: creditedAmount,
+    chargedAmount: capture.amount,
     currency: capture.currency,
     itemId: capture.itemId,
     captureId: capture.captureId,

@@ -113,6 +113,7 @@ export interface DonationRow {
   item_id: string;
   item_name: string;
   amount: string;
+  fee_amount: string;
   currency: string;
   source: 'paypal' | 'manual';
   note: string | null;

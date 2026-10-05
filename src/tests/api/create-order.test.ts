@@ -118,6 +118,13 @@ describe('POST /api/[slug]/paypal/create-order', () => {
     expect(createOrder.mock.calls[0][1].amount).toBe(10.66);
   });
 
+  it('sends the donation amount to PayPal only when the donor covers the fees', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, coverFees: true });
+    expect(createOrder.mock.calls[0][1]).toMatchObject({ amount: 10.66, donationAmount: 10 });
+    await call({ itemId: ITEM_ID, amount: 10 });
+    expect(createOrder.mock.calls[1][1].donationAmount).toBeUndefined();
+  });
+
   it('uses the fees configured for the center', async () => {
     getCenterWithSecret.mockResolvedValue({ ...center, fees: { paypal: { rate: 0.05, fixed: 0.5 }, card: { rate: 0.012, fixed: 0.35 } } });
     await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'paypal' });
