@@ -14,7 +14,7 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
+import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
@@ -87,6 +87,39 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id = ${item}`;
     await sql`DELETE FROM items WHERE id = ${item}`;
+  });
+
+  it('voids a PayPal donation once, keeps who and why, and reopens a funded item', async () => {
+    const id = await createItem(centerA, { ...itemInput, name: 'refund', goal: 20, sortOrder: 9200 });
+    await recordPaypalDonation({ centerId: centerA, itemId: id, amount: '20.00', currency: 'EUR', captureId: `CAP-${suffix}-refund` });
+    expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 20 });
+    expect((await listPublicItems(centerA)).find((item) => item.id === id)).toMatchObject({ status: 'funded' });
+    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+
+    expect(await voidPaypalDonation(centerB, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
+    expect(await voidPaypalDonation(centerA, donation, { reason: 'reembolso', actorEmail: 'boss@example.org' })).toBe('voided');
+    expect(await voidPaypalDonation(centerA, donation, { reason: 'otra vez', actorEmail: 'other@example.org' })).toBe('already_voided');
+
+    const row = (await listDonations(centerA)).find((entry) => entry.id === donation)!;
+    expect(row).toMatchObject({ voided_by: 'boss@example.org', void_reason: 'reembolso' });
+    expect(row.voided_at).not.toBeNull();
+    expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 0 });
+    expect((await listPublicItems(centerA)).find((item) => item.id === id)).toMatchObject({ status: 'active' });
+    expect(await removeOrArchiveItem(centerA, id)).toBe('archived');
+
+    await sql`DELETE FROM donations WHERE item_id = ${id}`;
+    await sql`DELETE FROM items WHERE id = ${id}`;
+  });
+
+  it('does not let manual donations be voided as PayPal ones or carry void metadata', async () => {
+    const id = await createItem(centerA, { ...itemInput, name: 'manual-only', sortOrder: 9201 });
+    await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: '' });
+    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    expect(await voidPaypalDonation(centerA, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
+    await expect(sql`UPDATE donations SET void_reason = 'x' WHERE id = ${donation}`).rejects.toThrow();
+
+    await sql`DELETE FROM donations WHERE item_id = ${id}`;
+    await sql`DELETE FROM items WHERE id = ${id}`;
   });
 
   it('does not count the same PayPal capture twice', async () => {

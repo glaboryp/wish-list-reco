@@ -120,6 +120,16 @@ export function parseManualDonation(form: FormData): Parsed<{ itemId: string; am
   return { ok: true, value: { itemId, amount, note } };
 }
 
+export function parseVoidDonation(form: FormData): Parsed<{ donationId: string; reason: string }> {
+  const donationId = text(form, 'donation_id');
+  if (!isUuid(donationId)) return fail('No se encontró la donación');
+
+  const reason = text(form, 'reason');
+  if (reason.length < 3 || reason.length > 200) return fail('Escribe el motivo de la anulación (entre 3 y 200 caracteres), por ejemplo «reembolso en PayPal»');
+
+  return { ok: true, value: { donationId, reason } };
+}
+
 export function parsePaypal(form: FormData): Parsed<PayPalFormInput> {
   const clientId = text(form, 'client_id');
   if (!PAYPAL_CLIENT_ID_PATTERN.test(clientId)) return fail('El Client ID de PayPal no es válido');

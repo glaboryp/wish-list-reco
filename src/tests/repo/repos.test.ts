@@ -5,7 +5,7 @@ const { mockSql } = vi.hoisted(() => ({ mockSql: vi.fn() }));
 vi.mock('../../lib/db', () => ({ default: mockSql }));
 
 import { getCenterBySlug, getCenterWithSecret, listCenters } from '../../lib/repo/centers';
-import { recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
+import { recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import { removeOrArchiveItem } from '../../lib/repo/items';
 import { removeCenterUser } from '../../lib/repo/users';
 
@@ -70,6 +70,16 @@ describe('donations repository', () => {
     expect(await voidManualDonation('c', 'd1')).toBe(true);
     mockSql.mockResolvedValueOnce([]);
     expect(await voidManualDonation('c', 'd2')).toBe(false);
+  });
+
+  it('maps the PayPal void outcomes', async () => {
+    const input = { reason: 'reembolso', actorEmail: 'boss@example.org' };
+    mockSql.mockResolvedValueOnce([{ id: 'd1' }]);
+    expect(await voidPaypalDonation('c', 'd1', input)).toBe('voided');
+    mockSql.mockResolvedValueOnce([]).mockResolvedValueOnce([{ ok: 1 }]);
+    expect(await voidPaypalDonation('c', 'd1', input)).toBe('already_voided');
+    mockSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    expect(await voidPaypalDonation('c', 'd2', input)).toBe('missing');
   });
 });
 

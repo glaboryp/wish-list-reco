@@ -59,9 +59,26 @@ export async function voidManualDonation(centerId: string, donationId: string): 
   return rows.length > 0;
 }
 
+export async function voidPaypalDonation(
+  centerId: string,
+  donationId: string,
+  input: { reason: string; actorEmail: string },
+): Promise<'voided' | 'already_voided' | 'missing'> {
+  const rows = await sql`
+    UPDATE donations SET voided_at = NOW(), voided_by = ${input.actorEmail}, void_reason = ${input.reason}
+    WHERE id = ${donationId} AND center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
+    RETURNING id
+  `;
+  if (rows.length > 0) return 'voided';
+  const existing = await sql`
+    SELECT 1 AS ok FROM donations WHERE id = ${donationId} AND center_id = ${centerId} AND source = 'paypal'
+  `;
+  return existing.length > 0 ? 'already_voided' : 'missing';
+}
+
 export async function listDonations(centerId: string): Promise<DonationRow[]> {
   const rows = await sql`
-    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.created_at
+    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
     FROM donations d JOIN items i ON i.id = d.item_id
     WHERE d.center_id = ${centerId}
     ORDER BY d.created_at DESC

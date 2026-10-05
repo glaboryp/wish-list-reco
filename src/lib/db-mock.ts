@@ -51,6 +51,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     const found = centers.filter((center) => has(center.slug));
     return found.length > 0 ? found : values.length === 0 ? centers : [];
   }
+  if (text.includes('UPDATE donations SET voided_at') && text.includes('voided_by')) {
+    return has(RECOLETOS_ID) ? [{ id: '55555555-5555-4555-8555-555555555551' }] : [];
+  }
   if (text.includes('FROM donations d JOIN items i')) {
     return has(RECOLETOS_ID)
       ? [
