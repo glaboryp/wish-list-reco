@@ -59,13 +59,39 @@ export async function voidManualDonation(centerId: string, donationId: string): 
   return rows.length > 0;
 }
 
-export async function listDonations(centerId: string): Promise<DonationRow[]> {
-  const rows = await sql`
-    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.created_at
-    FROM donations d JOIN items i ON i.id = d.item_id
-    WHERE d.center_id = ${centerId}
-    ORDER BY d.created_at DESC
-    LIMIT 200
-  `;
-  return rows as DonationRow[];
+export const DONATIONS_PAGE_SIZE = 50;
+
+export interface DonationsPage {
+  rows: DonationRow[];
+  total: number;
+  activeSum: number;
+}
+
+export async function listDonations(
+  centerId: string,
+  options: { itemId?: string | null; page?: number; pageSize?: number } = {},
+): Promise<DonationsPage> {
+  const itemId = options.itemId ?? null;
+  const pageSize = options.pageSize ?? DONATIONS_PAGE_SIZE;
+  const offset = (Math.max(1, options.page ?? 1) - 1) * pageSize;
+
+  const [rows, totals] = await Promise.all([
+    sql`
+      SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.created_at
+      FROM donations d JOIN items i ON i.id = d.item_id
+      WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
+      ORDER BY d.created_at DESC, d.id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `,
+    sql`
+      SELECT COUNT(*) AS total, COALESCE(SUM(d.amount) FILTER (WHERE d.voided_at IS NULL), 0) AS active_sum
+      FROM donations d
+      WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
+    `,
+  ]);
+  return {
+    rows: rows as DonationRow[],
+    total: Number(totals[0].total),
+    activeSum: parseFloat(totals[0].active_sum),
+  };
 }
