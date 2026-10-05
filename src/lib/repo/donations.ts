@@ -5,12 +5,13 @@ export async function recordPaypalDonation(input: {
   centerId: string;
   itemId: string;
   amount: string;
+  feeAmount?: string;
   currency: string;
   captureId: string;
 }): Promise<'created' | 'duplicate' | 'item_not_found'> {
   const inserted = await sql`
-    INSERT INTO donations (center_id, item_id, amount, currency, source, paypal_capture_id)
-    SELECT ${input.centerId}, id, ${input.amount}, ${input.currency}, 'paypal', ${input.captureId}
+    INSERT INTO donations (center_id, item_id, amount, fee_amount, currency, source, paypal_capture_id)
+    SELECT ${input.centerId}, id, ${input.amount}, ${input.feeAmount ?? '0'}, ${input.currency}, 'paypal', ${input.captureId}
     FROM items WHERE id = ${input.itemId} AND center_id = ${input.centerId}
     ON CONFLICT (paypal_capture_id) DO NOTHING
     RETURNING id
@@ -60,7 +61,7 @@ export async function voidManualDonation(centerId: string, donationId: string): 
 
 export async function listDonations(centerId: string): Promise<DonationRow[]> {
   const rows = await sql`
-    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.currency, d.source, d.note, d.voided_at, d.created_at
+    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.created_at
     FROM donations d JOIN items i ON i.id = d.item_id
     WHERE d.center_id = ${centerId}
     ORDER BY d.created_at DESC

@@ -14,7 +14,7 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
+import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
@@ -73,6 +73,20 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
     expect(await voidManualDonation(centerA, manual[0].id)).toBe(true);
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 60, status: 'active' });
+  });
+
+  it('credits the net donation and keeps the fee apart', async () => {
+    const item = await createItem(centerA, { ...itemInput, name: 'fees', sortOrder: 9999 });
+    expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '10.00', feeAmount: '0.66', currency: 'EUR', captureId: `CAP-${suffix}-fee` })).toBe('created');
+    expect(await getAdminItem(centerA, item)).toMatchObject({ raised: 10 });
+    const row = (await listDonations(centerA)).find((donation) => donation.item_id === item)!;
+    expect(Number(row.amount)).toBe(10);
+    expect(Number(row.fee_amount)).toBe(0.66);
+    expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-nofee` })).toBe('created');
+    expect(await getAdminItem(centerA, item)).toMatchObject({ raised: 15 });
+
+    await sql`DELETE FROM donations WHERE item_id = ${item}`;
+    await sql`DELETE FROM items WHERE id = ${item}`;
   });
 
   it('does not count the same PayPal capture twice', async () => {

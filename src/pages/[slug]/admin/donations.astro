@@ -114,8 +114,15 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
             <tr class={donation.voided_at ? 'text-muted' : ''}>
               <td class={`${tdClass} tabular`} data-label="Fecha">{date.format(new Date(donation.created_at))}</td>
               <td class={`${tdClass} font-semibold`} data-label="Artículo">{donation.item_name}</td>
-              <td class={`${tdClass} tabular ${donation.voided_at ? 'line-through' : ''}`} data-label="Importe">
-                {formatEuro(Number(donation.amount))}
+              <td class={`${tdClass} tabular`} data-label="Importe">
+                <div class="md:text-left">
+                  <span class={donation.voided_at ? 'line-through' : ''}>{formatEuro(Number(donation.amount))}</span>
+                  {Number(donation.fee_amount) > 0 && (
+                    <span class="block text-sm text-muted">
+                      Cobrado {formatEuro(Number(donation.amount) + Number(donation.fee_amount))}, con {formatEuro(Number(donation.fee_amount))} de comisiones
+                    </span>
+                  )}
+                </div>
               </td>
               <td class={tdClass} data-label="Cómo llegó">
                 {donation.voided_at

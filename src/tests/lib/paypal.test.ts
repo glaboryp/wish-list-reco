@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encryptSecret } from '../../lib/crypto';
-import { apiBase, captureOrder, createOrder, credentialsFor, PayPalError } from '../../lib/paypal';
+import { apiBase, captureOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
 import type { CenterWithSecret } from '../../types/database';
 
 const key = Buffer.alloc(32, 1).toString('base64');
@@ -78,7 +78,7 @@ describe('createOrder', () => {
 describe('captureOrder', () => {
   it('returns the capture details', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(completed));
-    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1' });
+    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null });
   });
 
   it('recovers an already captured order by reading it back', async () => {
@@ -145,5 +145,41 @@ describe('captureOrder', () => {
     };
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(pending));
     await expect(captureOrder(creds, 'ORDER-1')).rejects.toThrow('incomplete capture data');
+  });
+});
+
+describe('custom id with the donation amount', () => {
+  it('keeps the plain item id when no fees are added', () => {
+    expect(customIdFor('item-1')).toBe('item-1');
+    expect(customIdFor('item-1', 10)).toBe('item-1:10.00');
+  });
+
+  it('puts the donation in the order when the donor covers the fees', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok({ id: 'ORDER-1' }));
+    await createOrder(creds, { amount: 10.66, donationAmount: 10, description: 'd', itemId: 'item-1', brandName: 'b' });
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.purchase_units[0]).toMatchObject({ custom_id: 'item-1:10.00', reference_id: 'item-1', amount: { value: '10.66' } });
+  });
+
+  it.each([
+    ['item-1', '10.66', { itemId: 'item-1', donationAmount: null }],
+    ['item-1:10.00', '10.66', { itemId: 'item-1', donationAmount: '10.00' }],
+    ['item-1:10', '10.66', { itemId: 'item-1', donationAmount: '10.00' }],
+    ['item-1:10.66', '10.66', { itemId: 'item-1', donationAmount: null }],
+    ['item-1:20.00', '10.66', { itemId: 'item-1', donationAmount: null }],
+    ['item-1:0.00', '10.66', { itemId: 'item-1', donationAmount: null }],
+    ['item-1:abc', '10.66', { itemId: 'item-1', donationAmount: null }],
+  ])('reads %s charged %s', (customId, charged, expected) => {
+    expect(parseCustomId(customId, charged)).toEqual(expected);
+  });
+
+  it('returns the donation amount stored in the capture', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(
+      ok({
+        status: 'COMPLETED',
+        purchase_units: [{ payments: { captures: [{ id: 'CAP9', custom_id: 'item-1:10.00', amount: { value: '10.66', currency_code: 'EUR' }, status: 'COMPLETED' }] } }],
+      }),
+    );
+    expect(await captureOrder(creds, 'ORDER-9')).toMatchObject({ itemId: 'item-1', amount: '10.66', donationAmount: '10.00' });
   });
 });

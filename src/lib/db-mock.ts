@@ -51,6 +51,14 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     const found = centers.filter((center) => has(center.slug));
     return found.length > 0 ? found : values.length === 0 ? centers : [];
   }
+  if (text.includes('FROM donations d JOIN items i')) {
+    return has(RECOLETOS_ID)
+      ? [
+          { id: '55555555-5555-4555-8555-555555555551', item_id: ITEM_ID, item_name: 'Cáliz', amount: '10.00', fee_amount: '0.66', currency: 'EUR', source: 'paypal', note: null, voided_at: null, created_at: '2026-10-02T10:00:00Z' },
+          { id: '55555555-5555-4555-8555-555555555552', item_id: ITEM_ID, item_name: 'Cáliz', amount: '15.00', fee_amount: '0', currency: 'EUR', source: 'manual', note: 'bizum', voided_at: null, created_at: '2026-10-01T10:00:00Z' },
+        ]
+      : [];
+  }
   if (text.includes('item_images img JOIN items')) {
     return has(RECOLETOS_ID)
       ? ['/favicon.webp', '/oratorio.webp'].map((image_url, sort_order) => ({

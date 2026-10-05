@@ -12,6 +12,7 @@ export interface CaptureResult {
   amount: string;
   currency: string;
   itemId: string;
+  donationAmount: string | null;
 }
 
 export class PayPalError extends Error {
@@ -56,9 +57,24 @@ async function accessToken(credentials: PayPalCredentials): Promise<string> {
   return data.access_token;
 }
 
+const DONATION_PATTERN = /^\d{1,7}(\.\d{1,2})?$/;
+
+export function customIdFor(itemId: string, donationAmount?: number): string {
+  return donationAmount === undefined ? itemId : `${itemId}:${donationAmount.toFixed(2)}`;
+}
+
+export function parseCustomId(customId: string, charged: string): { itemId: string; donationAmount: string | null } {
+  const [itemId, donation] = customId.split(':');
+  if (donation === undefined || !DONATION_PATTERN.test(donation)) return { itemId, donationAmount: null };
+  const donationCents = Math.round(parseFloat(donation) * 100);
+  const chargedCents = Math.round(parseFloat(charged) * 100);
+  if (donationCents <= 0 || donationCents >= chargedCents) return { itemId, donationAmount: null };
+  return { itemId, donationAmount: (donationCents / 100).toFixed(2) };
+}
+
 export async function createOrder(
   credentials: PayPalCredentials,
-  input: { amount: number; description: string; itemId: string; brandName: string },
+  input: { amount: number; description: string; itemId: string; brandName: string; donationAmount?: number },
 ): Promise<string> {
   const token = await accessToken(credentials);
   const res = await fetch(`${apiBase(credentials.env)}/v2/checkout/orders`, {
@@ -70,7 +86,7 @@ export async function createOrder(
         {
           amount: { currency_code: 'EUR', value: input.amount.toFixed(2) },
           description: input.description,
-          custom_id: input.itemId,
+          custom_id: customIdFor(input.itemId, input.donationAmount),
           reference_id: input.itemId,
         },
       ],
@@ -108,10 +124,12 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
   if (!capture?.id || !capture.amount?.value || !capture.custom_id) {
     throw new PayPalError('incomplete capture data');
   }
+  const { itemId, donationAmount } = parseCustomId(capture.custom_id, capture.amount.value);
   return {
     captureId: capture.id,
     amount: capture.amount.value,
     currency: capture.amount.currency_code,
-    itemId: capture.custom_id,
+    itemId,
+    donationAmount,
   };
 }

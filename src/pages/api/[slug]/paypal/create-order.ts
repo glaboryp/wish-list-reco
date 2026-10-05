@@ -63,6 +63,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       description: `Donación para: ${item.name}`,
       itemId,
       brandName: center.name,
+      donationAmount: coverFees ? donationAmount : undefined,
     });
     return json({ id });
   } catch (error) {
