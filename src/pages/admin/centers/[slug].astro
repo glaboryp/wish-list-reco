@@ -2,10 +2,10 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import Icon from "../../../components/Icon.astro";
 import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass, linkClass, secondaryButtonClass } from "../../../components/admin/ui";
-import { parseEmail, parsePaypal } from "../../../lib/admin/forms";
+import { parseEmail, parseFees, parsePaypal } from "../../../lib/admin/forms";
 import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
-import { getCenterBySlug, setCenterStatus } from "../../../lib/repo/centers";
+import { getCenterBySlug, setCenterStatus, updateFeeSettings } from "../../../lib/repo/centers";
 import { addCenterUser } from "../../../lib/repo/users";
 
 const guard = await guardSuperadmin(Astro);
@@ -16,6 +16,7 @@ const center = await getCenterBySlug(Astro.params.slug ?? '');
 if (!center) return new Response('Centro no encontrado', { status: 404 });
 
 const here = `/admin/centers/${center.slug}`;
+const percent = (rate: number) => String(Math.round(rate * 10000) / 100).replace('.', ',');
 const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
 
 if (Astro.request.method === 'POST') {
@@ -36,6 +37,10 @@ if (Astro.request.method === 'POST') {
       console.error('PayPal settings save failed:', err instanceof Error ? err.message : 'unknown error');
       return fail('No se pudo guardar el secret; revisa la configuración de cifrado');
     }
+  } else if (intent === 'fees') {
+    const parsed = parseFees(form);
+    if (!parsed.ok) return fail(parsed.error);
+    await updateFeeSettings(center.id, parsed.value);
   } else if (intent === 'status') {
     const status = form.get('status');
     if (status !== 'active' && status !== 'disabled') return fail('Estado no válido');
@@ -88,6 +93,45 @@ if (Astro.request.method === 'POST') {
     </div>
     <div class={formFooterClass}>
       <button type="submit" class={buttonClass}>Guardar PayPal</button>
+    </div>
+  </form>
+
+  <form method="post" class={`${cardClass} space-y-5`}>
+    <input type="hidden" name="intent" value="fees" />
+    <div>
+      <h2 class="text-xl font-bold text-ink">Comisiones de PayPal</h2>
+      <p class="mt-1 text-base text-muted">
+        Lo que PayPal cobra al centro en cada pago. Se usa para calcular cuánto se suma cuando el donante marca «Añadir las comisiones», de modo que el centro reciba la donación completa.
+        Para ver la tarifa real, mira la columna «Tarifa» de las transacciones del centro en PayPal: tarifa dividida entre el importe, menos la cuota fija.
+      </p>
+    </div>
+    <div class="grid gap-6 sm:grid-cols-2">
+      <fieldset class="space-y-4">
+        <legend class="text-base font-bold text-ink">Botón de PayPal</legend>
+        <div>
+          <label class={labelClass} for="paypal_percent">Porcentaje (%)</label>
+          <input id="paypal_percent" name="paypal_percent" class={inputClass} inputmode="decimal" value={percent(center.fees.paypal.rate)} required />
+        </div>
+        <div>
+          <label class={labelClass} for="paypal_fixed">Cuota fija (€)</label>
+          <input id="paypal_fixed" name="paypal_fixed" class={inputClass} inputmode="decimal" value={String(center.fees.paypal.fixed).replace('.', ',')} required />
+        </div>
+      </fieldset>
+      <fieldset class="space-y-4">
+        <legend class="text-base font-bold text-ink">Botón de tarjeta</legend>
+        <div>
+          <label class={labelClass} for="card_percent">Porcentaje (%)</label>
+          <input id="card_percent" name="card_percent" class={inputClass} inputmode="decimal" value={percent(center.fees.card.rate)} required />
+        </div>
+        <div>
+          <label class={labelClass} for="card_fixed">Cuota fija (€)</label>
+          <input id="card_fixed" name="card_fixed" class={inputClass} inputmode="decimal" value={String(center.fees.card.fixed).replace('.', ',')} required />
+        </div>
+      </fieldset>
+    </div>
+    <p class={helpClass}>Un centro nuevo empieza con la tarifa estándar de PayPal, 2,9% + 0,35 €, en los dos botones. Es la opción segura: si la cuenta tiene una tarifa más baja, el donante paga unos céntimos de más, pero el centro nunca recibe menos. A Recoletos, por ejemplo, PayPal le cobra 1,2% + 0,35 € en tarjeta. Para entidades sin ánimo de lucro aprobadas por PayPal, la tarifa publicada es 1,9% + 0,35 €. Para dejarlo exacto, mira la columna «Tarifa» de las primeras transacciones del centro.</p>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Guardar comisiones</button>
     </div>
   </form>
 

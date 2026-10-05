@@ -1,5 +1,6 @@
 ---
 import Icon from "./Icon.astro";
+import { DEFAULT_FEE_SCHEDULE, type FeeSchedule } from "../lib/fees";
 
 interface Props {
   itemId: string;
@@ -8,9 +9,10 @@ interface Props {
   centerName?: string;
   maxDonation: number;
   isDetailPage?: boolean;
+  feeSchedule?: FeeSchedule;
 }
 
-const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false } = Astro.props;
+const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false, feeSchedule = DEFAULT_FEE_SCHEDULE } = Astro.props;
 
 const inputId = `amount-${itemId}`;
 const buttonId = `paypal-button-${itemId}`;
@@ -140,6 +142,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
     slug,
     maxDonation,
     isDetailPage,
+    feeSchedule,
   }}
 >
   // Aviso breve: abajo en móvil y abajo a la derecha en pantallas grandes
@@ -181,24 +184,11 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 
     let buttonsEnabled = true;
 
-    const FEE_RATE = 0.029;
-    const FIXED_FEE = 0.35;
-
-    function calculateTotals(netoAmount) {
-      const neto =
-        typeof netoAmount === "number"
-          ? netoAmount
-          : parseFloat(amountInput.value) || 0;
-      if (!neto || neto <= 0) {
-        return { neto: 0, totalToCharge: 0, fee: 0 };
-      }
-
-      const totalToChargeRaw = (neto + FIXED_FEE) / (1 - FEE_RATE);
-      const totalToCharge = Math.round(totalToChargeRaw * 100) / 100;
-      const fee = totalToCharge - neto;
-
-      return { neto, totalToCharge, fee };
-    }
+    const totalWithFees = (neto, source) => {
+      const { rate, fixed } = feeSchedule[source];
+      return Math.round(((neto + fixed) / (1 - rate)) * 100) / 100;
+    };
+    const euros = (value) => value.toFixed(2).replace(".", ",") + " €";
 
     function updateFeeUI() {
       if (!coverFeesCheckbox || !feesLabelExtra || !feesSummary) return;
@@ -213,20 +203,11 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
         return;
       }
 
-      const { neto, totalToCharge, fee } = calculateTotals(value);
-      if (!totalToCharge || !fee) {
-        feesLabelExtra.textContent = "";
-        feesSummary.textContent = "";
-        feesSummary.classList.add("hidden");
-        return;
-      }
+      const paypalTotal = totalWithFees(value, "paypal");
+      const cardTotal = totalWithFees(value, "card");
 
-      const feeText = fee.toFixed(2).replace(".", ",");
-      const netText = neto.toFixed(2).replace(".", ",");
-      const totalText = totalToCharge.toFixed(2).replace(".", ",");
-
-      feesLabelExtra.textContent = ` (+${feeText} €) para que la donación llegue íntegra.`;
-      feesSummary.textContent = `Donación: ${netText} € + Gastos: ${feeText} € = Total: ${totalText} €`;
+      feesLabelExtra.textContent = ` (+${euros(paypalTotal - value)} con PayPal o +${euros(cardTotal - value)} con tarjeta)`;
+      feesSummary.textContent = `Donación: ${euros(value)}. Total a pagar: ${euros(paypalTotal)} con PayPal o ${euros(cardTotal)} con tarjeta.`;
       feesSummary.classList.remove("hidden");
     }
 
@@ -379,7 +360,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 
         return actions.resolve();
       },
-      createOrder: async (data, actions) => {
+      createOrder: async (data, actions, source = "paypal") => {
         const raw = amountInput.value;
         let value = Math.max(1, Math.floor(Number(raw) || 0));
 
@@ -413,6 +394,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
               itemId,
               amount: value,
               coverFees,
+              paymentSource: source,
             }),
           });
 
@@ -488,10 +470,17 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
       },
     };
 
+    // Cada botón tiene su propia tarifa de PayPal, así que le decimos al servidor cuál se usa
+    const configFor = (source) => ({
+      ...buttonConfig,
+      createOrder: (data, actions) =>
+        buttonConfig.createOrder(data, actions, source),
+    });
+
     // Renderizar botones separados (desktop o página de detalles)
     paypal
       .Buttons({
-        ...buttonConfig,
+        ...configFor("paypal"),
         style: {
           layout: "horizontal",
           color: "black",
@@ -505,7 +494,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 
     paypal
       .Buttons({
-        ...buttonConfig,
+        ...configFor("card"),
         style: {
           layout: "horizontal",
           color: "black",

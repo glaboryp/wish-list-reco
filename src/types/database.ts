@@ -1,3 +1,5 @@
+import type { FeeSchedule } from '../lib/fees';
+
 export type ItemStatus = 'draft' | 'active' | 'funded' | 'archived';
 export type CenterStatus = 'active' | 'disabled';
 export type PayPalEnv = 'sandbox' | 'live';
@@ -15,8 +17,16 @@ export interface Center {
   paypal_client_id: string | null;
   paypal_env: PayPalEnv;
   paypal_configured: boolean;
+  fees: FeeSchedule;
   created_at: string;
   updated_at: string;
+}
+
+export interface FeeSettingsInput {
+  paypalPercent: number;
+  paypalFixed: number;
+  cardPercent: number;
+  cardFixed: number;
 }
 
 export interface CenterWithSecret extends Center {

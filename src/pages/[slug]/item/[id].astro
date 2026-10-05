@@ -93,7 +93,7 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
         ) : center.paypal_configured ? (
           <div class="space-y-4 rounded-xl border border-line bg-white p-5 shadow-card sm:p-6">
             <h2 class="text-xl font-bold text-ink">Contribuir a este artículo</h2>
-            <DonationForm itemId={item.id} itemName={item.name} slug={center.slug} centerName={center.name} maxDonation={maxDonation} isDetailPage={true} />
+            <DonationForm itemId={item.id} itemName={item.name} slug={center.slug} centerName={center.name} feeSchedule={center.fees} maxDonation={maxDonation} isDetailPage={true} />
           </div>
         ) : (
           <div class="rounded-xl bg-surface p-6 text-base text-muted">

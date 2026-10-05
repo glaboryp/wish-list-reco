@@ -1,15 +1,28 @@
 import sql from '../db';
+import { feeScheduleFromRow } from '../fees';
 import type {
   AppearanceInput,
   Center,
   CenterStatus,
   CenterWithSecret,
+  FeeSettingsInput,
   PayPalSettingsInput,
 } from '../../types/database';
 
 function toCenter(row: any): Center {
-  const { paypal_secret_encrypted, ...rest } = row;
-  return { ...rest, paypal_configured: Boolean(paypal_secret_encrypted && rest.paypal_client_id) };
+  const {
+    paypal_secret_encrypted,
+    paypal_fee_percent,
+    paypal_fee_fixed,
+    card_fee_percent,
+    card_fee_fixed,
+    ...rest
+  } = row;
+  return {
+    ...rest,
+    paypal_configured: Boolean(paypal_secret_encrypted && rest.paypal_client_id),
+    fees: feeScheduleFromRow({ paypal_fee_percent, paypal_fee_fixed, card_fee_percent, card_fee_fixed }),
+  };
 }
 
 export async function listCenters(): Promise<Center[]> {
@@ -59,6 +72,18 @@ export async function updateAppearance(centerId: string, input: AppearanceInput)
 
 export async function setCenterStatus(centerId: string, status: CenterStatus): Promise<void> {
   await sql`UPDATE centers SET status = ${status}, updated_at = NOW() WHERE id = ${centerId}`;
+}
+
+export async function updateFeeSettings(centerId: string, input: FeeSettingsInput): Promise<void> {
+  await sql`
+    UPDATE centers SET
+      paypal_fee_percent = ${input.paypalPercent},
+      paypal_fee_fixed = ${input.paypalFixed},
+      card_fee_percent = ${input.cardPercent},
+      card_fee_fixed = ${input.cardFixed},
+      updated_at = NOW()
+    WHERE id = ${centerId}
+  `;
 }
 
 export async function updatePaypal(centerId: string, input: PayPalSettingsInput): Promise<void> {

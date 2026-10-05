@@ -1,0 +1,1 @@
+ALTER TABLE centers ALTER COLUMN card_fee_percent SET DEFAULT 2.90

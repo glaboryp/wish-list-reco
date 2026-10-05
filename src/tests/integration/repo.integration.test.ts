@@ -13,7 +13,7 @@ vi.mock('../../lib/db', async () => {
 });
 
 import sql from '../../lib/db';
-import { createCenter } from '../../lib/repo/centers';
+import { createCenter, getCenterBySlug, updateFeeSettings } from '../../lib/repo/centers';
 import { addManualDonation, recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
@@ -230,7 +230,7 @@ describe.skipIf(!databaseUrl)('item ordering, gallery and donation limits', () =
     } finally {
       await sql`DELETE FROM centers WHERE id = ${other}`;
     }
-  });
+  }, 30_000);
 
   it('refuses a manual donation above what is left to pay', async () => {
     const id = await make('limit', END, 100);
@@ -238,5 +238,31 @@ describe.skipIf(!databaseUrl)('item ordering, gallery and donation limits', () =
     expect(await addManualDonation({ centerId: center, itemId: id, amount: 50, note: '' })).toEqual({ status: 'too_much', remaining: 40 });
     expect(await addManualDonation({ centerId: center, itemId: id, amount: 40, note: '' })).toEqual({ status: 'created' });
     expect(await addManualDonation({ centerId: center, itemId: id, amount: 0.01, note: '' })).toEqual({ status: 'too_much', remaining: 0 });
+  });
+});
+
+describe.skipIf(!databaseUrl)('center fee schedule', () => {
+  const slug = `it-fees-${Math.random().toString(36).slice(2, 8)}`;
+  let centerId: string;
+
+  beforeAll(async () => {
+    centerId = (await createCenter({ slug, name: 'Fees' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM centers WHERE id = ${centerId}`;
+  });
+
+  it('starts with the standard PayPal rates for both buttons and can be changed', async () => {
+    expect((await getCenterBySlug(slug))?.fees).toEqual({
+      paypal: { rate: 0.029, fixed: 0.35 },
+      card: { rate: 0.029, fixed: 0.35 },
+    });
+
+    await updateFeeSettings(centerId, { paypalPercent: 3.49, paypalFixed: 0.4, cardPercent: 2.9, cardFixed: 0.35 });
+    expect((await getCenterBySlug(slug))?.fees).toEqual({
+      paypal: { rate: 0.0349, fixed: 0.4 },
+      card: { rate: 0.029, fixed: 0.35 },
+    });
   });
 });

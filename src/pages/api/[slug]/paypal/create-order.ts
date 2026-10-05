@@ -1,11 +1,9 @@
 import type { APIRoute } from 'astro';
+import { DEFAULT_FEE_SCHEDULE, amountWithFees, parsePaymentSource } from '../../../../lib/fees';
 import { isUuid } from '../../../../lib/ids';
 import { createOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { getPublicItem } from '../../../../lib/repo/items';
-
-const FEE_RATE = 0.029;
-const FIXED_FEE = 0.35;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,7 +21,7 @@ export const POST: APIRoute = async ({ params, request }) => {
     } catch {
       return json({ error: 'Faltan datos requeridos (itemId, amount)' }, 400);
     }
-    const { itemId, amount, coverFees } = body ?? {};
+    const { itemId, amount, coverFees, paymentSource } = body ?? {};
 
     if (!itemId || amount === undefined || amount === null) {
       return json({ error: 'Faltan datos requeridos (itemId, amount)' }, 400);
@@ -57,7 +55,7 @@ export const POST: APIRoute = async ({ params, request }) => {
 
     let purchaseAmount = donationAmount;
     if (coverFees) {
-      purchaseAmount = Math.round(((donationAmount + FIXED_FEE) / (1 - FEE_RATE)) * 100) / 100;
+      purchaseAmount = amountWithFees(donationAmount, parsePaymentSource(paymentSource), center.fees ?? DEFAULT_FEE_SCHEDULE);
     }
 
     const id = await createOrder(credentials, {

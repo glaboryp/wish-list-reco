@@ -3,6 +3,7 @@ import {
   END_OF_LIST,
   parseAppearance,
   parseEmail,
+  parseFees,
   parseImageUrl,
   parseItem,
   parseManualDonation,
@@ -186,5 +187,27 @@ describe('parseImageUrl', () => {
     ['foreign host', 'https://evil.example.com/recoletos/a.webp'],
   ])('rejects %s', (_label, value) => {
     expect(parseImageUrl(form({ image_url: value }), 'recoletos').ok).toBe(false);
+  });
+});
+
+describe('parseFees', () => {
+  const valid = { paypal_percent: '2,9', paypal_fixed: '0,35', card_percent: '1.2', card_fixed: '0.35' };
+
+  it('accepts commas and points as decimal separators', () => {
+    expect(parseFees(form(valid))).toEqual({
+      ok: true,
+      value: { paypalPercent: 2.9, paypalFixed: 0.35, cardPercent: 1.2, cardFixed: 0.35 },
+    });
+  });
+
+  it.each([
+    ['empty percent', { paypal_percent: '' }],
+    ['negative percent', { card_percent: '-1' }],
+    ['percent above 20', { paypal_percent: '25' }],
+    ['text percent', { card_percent: 'abc' }],
+    ['fixed above 5', { paypal_fixed: '6' }],
+    ['too many decimals', { card_fixed: '0,355' }],
+  ])('rejects %s', (_label, override) => {
+    expect(parseFees(form({ ...valid, ...override })).ok).toBe(false);
   });
 });
