@@ -97,9 +97,24 @@ describe('POST /api/[slug]/paypal/create-order', () => {
     );
   });
 
-  it('adds the PayPal fees when the donor covers them', async () => {
-    await call({ itemId: ITEM_ID, amount: 10, coverFees: true });
+  it('adds the PayPal button fees when the donor covers them', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'paypal' });
     expect(createOrder.mock.calls[0][1].amount).toBe(10.66);
+  });
+
+  it('adds the lower card button fees when the donor covers them', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'card' });
+    expect(createOrder.mock.calls[0][1].amount).toBe(10.48);
+  });
+
+  it('falls back to the PayPal fees for an unknown payment source', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'other' });
+    expect(createOrder.mock.calls[0][1].amount).toBe(10.66);
+  });
+
+  it('does not add fees unless the donor asks for it', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, paymentSource: 'card' });
+    expect(createOrder.mock.calls[0][1].amount).toBe(10);
   });
 
   it('returns 500 when PayPal fails', async () => {
