@@ -102,9 +102,15 @@ describe('POST /api/[slug]/paypal/create-order', () => {
     expect(createOrder.mock.calls[0][1].amount).toBe(10.66);
   });
 
-  it('adds the lower card button fees when the donor covers them', async () => {
+  it('adds the reduced card fees of a center that has them', async () => {
+    getCenterWithSecret.mockResolvedValue({ ...center, fees: { paypal: { rate: 0.029, fixed: 0.35 }, card: { rate: 0.012, fixed: 0.35 } } });
     await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'card' });
     expect(createOrder.mock.calls[0][1].amount).toBe(10.48);
+  });
+
+  it('uses the standard fees for the card button by default', async () => {
+    await call({ itemId: ITEM_ID, amount: 10, coverFees: true, paymentSource: 'card' });
+    expect(createOrder.mock.calls[0][1].amount).toBe(10.66);
   });
 
   it('falls back to the PayPal fees for an unknown payment source', async () => {

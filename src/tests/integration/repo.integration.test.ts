@@ -253,10 +253,10 @@ describe.skipIf(!databaseUrl)('center fee schedule', () => {
     await sql`DELETE FROM centers WHERE id = ${centerId}`;
   });
 
-  it('starts with the measured rates and can be changed', async () => {
+  it('starts with the standard PayPal rates for both buttons and can be changed', async () => {
     expect((await getCenterBySlug(slug))?.fees).toEqual({
       paypal: { rate: 0.029, fixed: 0.35 },
-      card: { rate: 0.012, fixed: 0.35 },
+      card: { rate: 0.029, fixed: 0.35 },
     });
 
     await updateFeeSettings(centerId, { paypalPercent: 3.49, paypalFixed: 0.4, cardPercent: 2.9, cardFixed: 0.35 });

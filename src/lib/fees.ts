@@ -9,7 +9,7 @@ export type FeeSchedule = Record<PaymentSource, FeeRate>;
 
 export const DEFAULT_FEE_SCHEDULE: FeeSchedule = {
   paypal: { rate: 0.029, fixed: 0.35 },
-  card: { rate: 0.012, fixed: 0.35 },
+  card: { rate: 0.029, fixed: 0.35 },
 };
 
 export function parsePaymentSource(value: unknown): PaymentSource {
