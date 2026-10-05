@@ -14,6 +14,8 @@ export interface PayPalFormInput {
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const text = (form: FormData, name: string): string => String(form.get(name) ?? '').trim();
+const removal = (form: FormData, field: string, replacement: string | null): boolean =>
+  text(form, `remove_${field}`) === '1' && replacement === null;
 
 const MONEY_PATTERN = /^\d{1,7}([.,]\d{1,2})?$/;
 const INTEGER_PATTERN = /^-?\d{1,6}$/;
@@ -63,7 +65,16 @@ export function parseAppearance(form: FormData, slug: string): Parsed<Appearance
 
   return {
     ok: true,
-    value: { name, heroTitle, heroText, primaryColor, heroImageUrl: heroImage.value, logoUrl: logo.value },
+    value: {
+      name,
+      heroTitle,
+      heroText,
+      primaryColor,
+      heroImageUrl: heroImage.value,
+      logoUrl: logo.value,
+      removeHeroImage: removal(form, 'hero_image_url', heroImage.value),
+      removeLogo: removal(form, 'logo_url', logo.value),
+    },
   };
 }
 

@@ -13,7 +13,7 @@ vi.mock('../../lib/db', async () => {
 });
 
 import sql from '../../lib/db';
-import { createCenter, getCenterBySlug, updateFeeSettings } from '../../lib/repo/centers';
+import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
 import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
@@ -278,5 +278,35 @@ describe.skipIf(!databaseUrl)('center fee schedule', () => {
       paypal: { rate: 0.0349, fixed: 0.4 },
       card: { rate: 0.029, fixed: 0.35 },
     });
+  });
+});
+
+describe.skipIf(!databaseUrl)('center appearance images', () => {
+  const slug = `it-look-${Math.random().toString(36).slice(2, 8)}`;
+  let centerId: string;
+  const base = { name: 'Look', heroTitle: 't', heroText: 'x', primaryColor: '#007986', removeHeroImage: false, removeLogo: false };
+  const HERO = 'https://x.public.blob.vercel-storage.com/hero.png';
+  const LOGO = 'https://x.public.blob.vercel-storage.com/logo.png';
+
+  beforeAll(async () => {
+    centerId = (await createCenter({ slug, name: 'Look' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM centers WHERE id = ${centerId}`;
+  });
+
+  it('keeps the images when saved untouched and removes them only on request', async () => {
+    await updateAppearance(centerId, { ...base, heroImageUrl: HERO, logoUrl: LOGO });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: HERO, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, name: 'Look 2', heroImageUrl: null, logoUrl: null });
+    expect(await getCenterBySlug(slug)).toMatchObject({ name: 'Look 2', hero_image_url: HERO, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, heroImageUrl: null, logoUrl: null, removeHeroImage: true });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: null, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, heroImageUrl: null, logoUrl: null, removeLogo: true });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: null, logo_url: null });
   });
 });
