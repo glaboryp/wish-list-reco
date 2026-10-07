@@ -12,3 +12,13 @@ export function isCenterBlobUrl(value: string, slug: string): boolean {
     return false;
   }
 }
+
+export function isBlobUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname.endsWith(BLOB_HOST_SUFFIX);
+  } catch {
+    return false;
+  }
+}

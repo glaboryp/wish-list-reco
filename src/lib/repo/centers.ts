@@ -1,4 +1,5 @@
 import sql from '../db';
+import { discardBlobs } from './blobs';
 import { feeScheduleFromRow } from '../fees';
 import type {
   AppearanceInput,
@@ -57,7 +58,8 @@ export async function createCenter(input: { slug: string; name: string }): Promi
 }
 
 export async function updateAppearance(centerId: string, input: AppearanceInput): Promise<void> {
-  await sql`
+  const rows = await sql`
+    WITH old AS (SELECT hero_image_url, logo_url FROM centers WHERE id = ${centerId})
     UPDATE centers SET
       name = ${input.name},
       hero_title = ${input.heroTitle},
@@ -67,7 +69,9 @@ export async function updateAppearance(centerId: string, input: AppearanceInput)
       logo_url = CASE WHEN ${input.removeLogo}::boolean THEN NULL ELSE COALESCE(${input.logoUrl}, logo_url) END,
       updated_at = NOW()
     WHERE id = ${centerId}
+    RETURNING (SELECT hero_image_url FROM old) AS old_hero, (SELECT logo_url FROM old) AS old_logo
   `;
+  if (rows.length > 0) await discardBlobs([rows[0].old_hero, rows[0].old_logo]);
 }
 
 export async function setCenterStatus(centerId: string, status: CenterStatus): Promise<void> {

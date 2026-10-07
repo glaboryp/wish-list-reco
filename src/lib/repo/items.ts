@@ -1,4 +1,5 @@
 import sql from '../db';
+import { discardBlobs } from './blobs';
 import { sortForPublic, toWishlistItem } from '../items';
 import type { AdminItem, DBItemImage, ItemInput, ItemRow, WishlistItem } from '../../types/database';
 
@@ -184,10 +185,11 @@ export async function removeItemImage(centerId: string, itemId: string, imageId:
     DELETE FROM item_images
     WHERE id = ${imageId} AND item_id = ${itemId}
       AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
-    RETURNING id
+    RETURNING id, image_url
   `;
   if (rows.length === 0) return false;
   await resequenceImages(itemId, null);
+  await discardBlobs([rows[0].image_url]);
   return true;
 }
 
@@ -219,6 +221,11 @@ export async function removeOrArchiveItem(
         AND source = 'manual' AND voided_at IS NOT NULL AND NOT (SELECT yes FROM blocked)
       RETURNING id
     ),
+    imgs AS (
+      SELECT image_url FROM item_images
+      WHERE item_id = ${itemId} AND NOT (SELECT yes FROM blocked)
+        AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
+    ),
     del AS (
       DELETE FROM items
       WHERE id = ${itemId} AND center_id = ${centerId} AND NOT (SELECT yes FROM blocked)
@@ -229,9 +236,13 @@ export async function removeOrArchiveItem(
       WHERE id = ${itemId} AND center_id = ${centerId} AND (SELECT yes FROM blocked)
       RETURNING id
     )
-    SELECT (SELECT COUNT(*) FROM del) AS deleted, (SELECT COUNT(*) FROM arch) AS archived, (SELECT COUNT(*) FROM cleared) AS cleared
+    SELECT (SELECT COUNT(*) FROM del) AS deleted, (SELECT COUNT(*) FROM arch) AS archived, (SELECT COUNT(*) FROM cleared) AS cleared,
+           (SELECT COALESCE(array_agg(image_url), '{}') FROM imgs) AS image_urls
   `;
-  if (Number(rows[0].deleted) > 0) return 'deleted';
+  if (Number(rows[0].deleted) > 0) {
+    await discardBlobs(rows[0].image_urls ?? []);
+    return 'deleted';
+  }
   if (Number(rows[0].archived) > 0) return 'archived';
   return 'missing';
 }
