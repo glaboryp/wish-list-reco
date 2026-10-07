@@ -13,7 +13,7 @@ vi.mock('../../lib/db', async () => {
 });
 
 import sql from '../../lib/db';
-import { createCenter, getCenterBySlug, updateFeeSettings } from '../../lib/repo/centers';
+import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
 import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
@@ -79,7 +79,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const item = await createItem(centerA, { ...itemInput, name: 'fees', sortOrder: 9999 });
     expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '10.00', feeAmount: '0.66', currency: 'EUR', captureId: `CAP-${suffix}-fee` })).toBe('created');
     expect(await getAdminItem(centerA, item)).toMatchObject({ raised: 10 });
-    const row = (await listDonations(centerA)).find((donation) => donation.item_id === item)!;
+    const row = (await listDonations(centerA)).rows.find((donation) => donation.item_id === item)!;
     expect(Number(row.amount)).toBe(10);
     expect(Number(row.fee_amount)).toBe(0.66);
     expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-nofee` })).toBe('created');
@@ -100,7 +100,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await voidPaypalDonation(centerA, donation, { reason: 'reembolso', actorEmail: 'boss@example.org' })).toBe('voided');
     expect(await voidPaypalDonation(centerA, donation, { reason: 'otra vez', actorEmail: 'other@example.org' })).toBe('already_voided');
 
-    const row = (await listDonations(centerA)).find((entry) => entry.id === donation)!;
+    const row = (await listDonations(centerA)).rows.find((entry) => entry.id === donation)!;
     expect(row).toMatchObject({ voided_by: 'boss@example.org', void_reason: 'reembolso' });
     expect(row.voided_at).not.toBeNull();
     expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 0 });
@@ -120,6 +120,37 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id = ${id}`;
     await sql`DELETE FROM items WHERE id = ${id}`;
+  });
+
+  it('pages and filters donations without leaking other centers', async () => {
+    const itemOne = await createItem(centerA, { ...itemInput, name: 'paged-1', goal: 1000, sortOrder: 9001 });
+    const itemTwo = await createItem(centerA, { ...itemInput, name: 'paged-2', goal: 1000, sortOrder: 9002 });
+    const foreign = await createItem(centerB, { ...itemInput, name: 'foreign', goal: 1000 });
+    for (let n = 0; n < 5; n++) {
+      await recordPaypalDonation({ centerId: centerA, itemId: itemOne, amount: '2.00', currency: 'EUR', captureId: `CAP-${suffix}-p1-${n}` });
+    }
+    await recordPaypalDonation({ centerId: centerA, itemId: itemTwo, amount: '7.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
+    await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-foreign` });
+    await addManualDonation({ centerId: centerA, itemId: itemOne, amount: 3, note: 'to void' });
+    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
+    await voidManualDonation(centerA, manual[0].id);
+
+    const first = await listDonations(centerA, { itemId: itemOne, page: 1, pageSize: 4 });
+    const second = await listDonations(centerA, { itemId: itemOne, page: 2, pageSize: 4 });
+    expect(first.total).toBe(6);
+    expect(first.activeSum).toBe(10);
+    expect(first.rows).toHaveLength(4);
+    expect(second.rows).toHaveLength(2);
+    expect(new Set([...first.rows, ...second.rows].map((row) => row.id)).size).toBe(6);
+    expect([...first.rows, ...second.rows].every((row) => row.item_id === itemOne)).toBe(true);
+
+    const all = await listDonations(centerA, { pageSize: 1000 });
+    expect(all.rows.some((row) => row.item_id === foreign)).toBe(false);
+    expect(await listDonations(centerA, { itemId: foreign })).toMatchObject({ total: 0, rows: [] });
+    expect((await listDonations(centerB, { itemId: foreign })).total).toBe(1);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${itemOne}, ${itemTwo}, ${foreign})`;
+    await sql`DELETE FROM items WHERE id IN (${itemOne}, ${itemTwo}, ${foreign})`;
   });
 
   it('does not count the same PayPal capture twice', async () => {
@@ -143,6 +174,40 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await listPublicItems(centerA)).toEqual([]);
     const fresh = await createItem(centerA, itemInput);
     expect(await removeOrArchiveItem(centerA, fresh)).toBe('deleted');
+  });
+
+  it('deletes an item whose only donations are voided manual ones, with those donations', async () => {
+    const id = await createItem(centerA, { ...itemInput, name: 'only-voided', sortOrder: 9100 });
+    await addManualDonation({ centerId: centerA, itemId: id, amount: 10, note: 'a' });
+    await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: 'b' });
+    expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 2 });
+
+    for (const row of await sql`SELECT id FROM donations WHERE item_id = ${id}`) {
+      await voidManualDonation(centerA, row.id);
+    }
+    expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 0 });
+
+    expect(await removeOrArchiveItem(centerA, id)).toBe('deleted');
+    expect(await getAdminItem(centerA, id)).toBeNull();
+    expect(await sql`SELECT 1 FROM donations WHERE item_id = ${id}`).toHaveLength(0);
+  });
+
+  it('archives instead of deleting when a manual donation is still valid or one came from PayPal', async () => {
+    const live = await createItem(centerA, { ...itemInput, name: 'one-live', sortOrder: 9101 });
+    await addManualDonation({ centerId: centerA, itemId: live, amount: 10, note: 'voided' });
+    await addManualDonation({ centerId: centerA, itemId: live, amount: 5, note: 'live' });
+    const first = await sql`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
+    await voidManualDonation(centerA, first[0].id);
+    expect(await removeOrArchiveItem(centerA, live)).toBe('archived');
+    expect(await getAdminItem(centerA, live)).toMatchObject({ status: 'archived', donationCount: 2, blockingDonationCount: 1 });
+
+    const paypal = await createItem(centerA, { ...itemInput, name: 'paypal', sortOrder: 9102 });
+    await recordPaypalDonation({ centerId: centerA, itemId: paypal, amount: '4.00', currency: 'EUR', captureId: `CAP-${suffix}-del` });
+    expect(await removeOrArchiveItem(centerA, paypal)).toBe('archived');
+    expect(await sql`SELECT 1 FROM donations WHERE item_id = ${paypal}`).toHaveLength(1);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${live}, ${paypal})`;
+    await sql`DELETE FROM items WHERE id IN (${live}, ${paypal})`;
   });
 
   it('keeps the current image when an item is saved without a new one', async () => {
@@ -311,5 +376,35 @@ describe.skipIf(!databaseUrl)('center fee schedule', () => {
       paypal: { rate: 0.0349, fixed: 0.4 },
       card: { rate: 0.029, fixed: 0.35 },
     });
+  });
+});
+
+describe.skipIf(!databaseUrl)('center appearance images', () => {
+  const slug = `it-look-${Math.random().toString(36).slice(2, 8)}`;
+  let centerId: string;
+  const base = { name: 'Look', heroTitle: 't', heroText: 'x', primaryColor: '#007986', removeHeroImage: false, removeLogo: false };
+  const HERO = 'https://x.public.blob.vercel-storage.com/hero.png';
+  const LOGO = 'https://x.public.blob.vercel-storage.com/logo.png';
+
+  beforeAll(async () => {
+    centerId = (await createCenter({ slug, name: 'Look' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM centers WHERE id = ${centerId}`;
+  });
+
+  it('keeps the images when saved untouched and removes them only on request', async () => {
+    await updateAppearance(centerId, { ...base, heroImageUrl: HERO, logoUrl: LOGO });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: HERO, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, name: 'Look 2', heroImageUrl: null, logoUrl: null });
+    expect(await getCenterBySlug(slug)).toMatchObject({ name: 'Look 2', hero_image_url: HERO, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, heroImageUrl: null, logoUrl: null, removeHeroImage: true });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: null, logo_url: LOGO });
+
+    await updateAppearance(centerId, { ...base, heroImageUrl: null, logoUrl: null, removeLogo: true });
+    expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: null, logo_url: null });
   });
 });

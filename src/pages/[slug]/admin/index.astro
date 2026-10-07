@@ -46,6 +46,7 @@ if (Astro.request.method === 'POST') {
           label="Imagen de portada"
           help="La foto grande de la parte de arriba de tu web."
           current={center.hero_image_url}
+          removable
         />
         <ImageUpload
           slug={center.slug}
@@ -53,6 +54,7 @@ if (Astro.request.method === 'POST') {
           label="Logo del centro"
           help="Aparece sobre el título de tu web y en el listado de centros."
           current={center.logo_url}
+          removable
         />
       </section>
 

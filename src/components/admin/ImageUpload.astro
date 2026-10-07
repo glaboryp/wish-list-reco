@@ -9,9 +9,10 @@ interface Props {
   help?: string;
   current?: string | null;
   requireUpload?: boolean;
+  removable?: boolean;
 }
 
-const { slug, name, label, help, current = null, requireUpload = false } = Astro.props;
+const { slug, name, label, help, current = null, requireUpload = false, removable = false } = Astro.props;
 const inputId = `upload-${name}`;
 ---
 
@@ -29,11 +30,18 @@ const inputId = `upload-${name}`;
         <span data-button-text>{current ? 'Cambiar imagen' : 'Elegir imagen'}</span>
         <input id={inputId} type="file" accept="image/webp,image/jpeg,image/png" class="sr-only" aria-labelledby={`${inputId}-label`} />
       </label>
+      {removable && (
+        <button type="button" data-remove hidden={!current} class={`${secondaryButtonClass} ml-2`}>
+          <Icon name="trash" class="h-5 w-5" />
+          Quitar imagen
+        </button>
+      )}
       <p class="text-sm text-muted">Formatos JPG, PNG o WebP. Máximo 5 MB.</p>
       <p class="text-sm font-semibold" data-status role="status" hidden></p>
     </div>
   </div>
   <input type="hidden" name={name} value="" />
+  {removable && <input type="hidden" name={`remove_${name}`} value="" data-remove-flag />}
 </div>
 
 <script>
@@ -46,6 +54,8 @@ const inputId = `upload-${name}`;
     const preview = root.querySelector<HTMLImageElement>('[data-preview]')!;
     const placeholder = root.querySelector<HTMLElement>('[data-placeholder]')!;
     const buttonText = root.querySelector<HTMLElement>('[data-button-text]')!;
+    const removeButton = root.querySelector<HTMLButtonElement>('[data-remove]');
+    const removeFlag = root.querySelector<HTMLInputElement>('[data-remove-flag]');
     const slug = root.dataset.slug!;
     const required = root.dataset.require === 'true';
     const submitButtons = () =>
@@ -59,6 +69,18 @@ const inputId = `upload-${name}`;
       status.textContent = message;
       status.className = `text-sm font-semibold ${tone === 'error' ? 'text-red-800' : tone === 'ok' ? 'text-green-800' : 'text-muted'}`;
     };
+
+    removeButton?.addEventListener('click', () => {
+      hidden.value = '';
+      file.value = '';
+      if (removeFlag) removeFlag.value = '1';
+      preview.removeAttribute('src');
+      preview.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+      buttonText.textContent = 'Elegir imagen';
+      removeButton.hidden = true;
+      show('La imagen se quitará cuando pulses el botón de guardar.', 'ok');
+    });
 
     file.addEventListener('change', async () => {
       const selected = file.files?.[0];
@@ -77,6 +99,8 @@ const inputId = `upload-${name}`;
           handleUploadUrl: `/api/${slug}/upload`,
         });
         hidden.value = blob.url;
+        if (removeFlag) removeFlag.value = '';
+        if (removeButton) removeButton.hidden = false;
         buttonText.textContent = 'Cambiar imagen';
         show('Imagen lista. Pulsa el botón de guardar para aplicarla.', 'ok');
       } catch {

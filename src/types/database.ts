@@ -82,6 +82,7 @@ export interface AdminItem {
   imageUrl: string | null;
   imageAlt: string | null;
   donationCount: number;
+  blockingDonationCount: number;
 }
 
 export interface ItemInput {
@@ -100,6 +101,8 @@ export interface AppearanceInput {
   primaryColor: string;
   heroImageUrl: string | null;
   logoUrl: string | null;
+  removeHeroImage: boolean;
+  removeLogo: boolean;
 }
 
 export interface PayPalSettingsInput {

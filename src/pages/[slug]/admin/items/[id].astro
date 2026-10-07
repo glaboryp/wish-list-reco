@@ -28,7 +28,7 @@ if (Astro.request.method === 'POST') {
 
   if (form.get('intent') === 'remove') {
     const outcome = await removeOrArchiveItem(center.id, item.id);
-    const message = outcome === 'archived' ? 'El artículo tiene donaciones, se ha archivado en lugar de borrarlo' : '';
+    const message = outcome === 'archived' ? 'El artículo tiene donaciones que impiden borrarlo, se ha archivado' : '';
     return Astro.redirect(message ? `${listUrl}?error=${encodeURIComponent(message)}` : `${listUrl}?ok=item-removed`, 303);
   }
 
@@ -166,17 +166,19 @@ const positions = positionOptions(allItems, item.id);
   <form
     method="post"
     class={`${cardClass} flex flex-wrap items-center justify-between gap-4`}
-    onsubmit={`return confirm('${item.donationCount > 0 ? '¿Archivar este artículo? Dejará de verse en tu web.' : '¿Borrar este artículo para siempre?'}')`}
+    onsubmit={`return confirm('${item.blockingDonationCount > 0 ? '¿Archivar este artículo? Dejará de verse en tu web.' : '¿Borrar este artículo para siempre?'}')`}
   >
     <input type="hidden" name="intent" value="remove" />
     <div class="max-w-xl">
-      <h2 class="text-lg font-bold text-ink">{item.donationCount > 0 ? 'Archivar este artículo' : 'Borrar este artículo'}</h2>
+      <h2 class="text-lg font-bold text-ink">{item.blockingDonationCount > 0 ? 'Archivar este artículo' : 'Borrar este artículo'}</h2>
       <p class="mt-1 text-base text-muted">
-        {item.donationCount > 0
-          ? 'Este artículo tiene donaciones, así que no se borra: se archiva y deja de verse en tu web, y el registro de lo recaudado se conserva.'
-          : 'Este artículo no tiene donaciones, así que se borrará para siempre.'}
+        {item.blockingDonationCount > 0
+          ? 'Este artículo tiene donaciones vigentes o de PayPal que impiden borrarlo: se archiva y deja de verse en tu web, y el registro de lo recaudado se conserva.'
+          : item.donationCount > 0
+            ? 'Este artículo solo tiene donaciones apuntadas a mano que ya están anuladas. Se borrará para siempre, junto con ese registro.'
+            : 'Este artículo no tiene donaciones, así que se borrará para siempre.'}
       </p>
     </div>
-    <button type="submit" class={dangerButtonClass}>{item.donationCount > 0 ? 'Archivar artículo' : 'Borrar artículo'}</button>
+    <button type="submit" class={dangerButtonClass}>{item.blockingDonationCount > 0 ? 'Archivar artículo' : 'Borrar artículo'}</button>
   </form>
 </AdminLayout>

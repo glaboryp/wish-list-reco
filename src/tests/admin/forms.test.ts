@@ -51,8 +51,21 @@ describe('parseAppearance', () => {
         primaryColor: '#007986',
         heroImageUrl: null,
         logoUrl: null,
+        removeHeroImage: false,
+        removeLogo: false,
       },
     });
+  });
+
+  it('flags an image for removal only when asked and no new image is sent', () => {
+    const removed = parseAppearance(form({ ...valid, remove_hero_image_url: '1', remove_logo_url: '1' }), 'recoletos');
+    expect(removed.ok && removed.value).toMatchObject({ removeHeroImage: true, removeLogo: true, heroImageUrl: null, logoUrl: null });
+
+    const replaced = parseAppearance(form({ ...valid, hero_image_url: BLOB, remove_hero_image_url: '1' }), 'recoletos');
+    expect(replaced.ok && replaced.value).toMatchObject({ removeHeroImage: false, heroImageUrl: BLOB });
+
+    const untouched = parseAppearance(form({ ...valid, remove_hero_image_url: '' }), 'recoletos');
+    expect(untouched.ok && untouched.value).toMatchObject({ removeHeroImage: false, removeLogo: false });
   });
 
   it('keeps an uploaded image URL from this center', () => {
