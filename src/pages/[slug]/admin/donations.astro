@@ -1,7 +1,7 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
-import { formatEuro } from "../../../lib/format";
+import { formatDateTime, formatEuro } from "../../../lib/format";
 import { parseManualDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { isUuid } from "../../../lib/ids";
@@ -42,7 +42,6 @@ const payable = items
   .filter((item) => item.status !== 'archived')
   .map((item) => ({ item, remaining: Math.round((item.goal - item.raised) * 100) / 100 }))
   .filter(({ remaining }) => remaining > 0);
-const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 ---
 
 <AdminLayout
@@ -112,7 +111,7 @@ const date = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: '
         <tbody>
           {donations.map((donation) => (
             <tr class={donation.voided_at ? 'text-muted' : ''}>
-              <td class={`${tdClass} tabular`} data-label="Fecha">{date.format(new Date(donation.created_at))}</td>
+              <td class={`${tdClass} tabular`} data-label="Fecha">{formatDateTime(donation.created_at)}</td>
               <td class={`${tdClass} font-semibold`} data-label="Artículo">{donation.item_name}</td>
               <td class={`${tdClass} tabular`} data-label="Importe">
                 <div class="md:text-left">
