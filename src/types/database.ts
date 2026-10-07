@@ -121,6 +121,8 @@ export interface DonationRow {
   source: 'paypal' | 'manual';
   note: string | null;
   voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
   created_at: string;
 }
 

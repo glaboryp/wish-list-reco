@@ -92,6 +92,48 @@ test.describe('admin access control', () => {
     });
 });
 
+test.describe('voiding PayPal donations', () => {
+    const forged = {
+        intent: 'void_paypal',
+        donation_id: '55555555-5555-4555-8555-555555555551',
+        reason: 'reembolso',
+    };
+
+    test('managers do not see the action and cannot run it with a forged POST', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/donations');
+        await expect(page.getByText('Anular por reembolso')).toHaveCount(0);
+
+        const response = await context.request.post('/recoletos/admin/donations', {
+            form: forged,
+            headers: { origin: ORIGIN },
+            maxRedirects: 0,
+        });
+        expect(response.status()).toBe(403);
+    });
+
+    test('the superadmin sees it only on live PayPal donations and can void one', async ({ page, context }) => {
+        await signIn(context, 'boss@example.org');
+        await page.goto('/recoletos/admin/donations');
+        await expect(page.getByText('Anular por reembolso')).toHaveCount(1);
+
+        const response = await context.request.post('/recoletos/admin/donations', {
+            form: forged,
+            headers: { origin: ORIGIN },
+            maxRedirects: 0,
+        });
+        expect(response.status()).toBe(303);
+        expect(response.headers()['location']).toContain('ok=donation-voided');
+
+        const noReason = await context.request.post('/recoletos/admin/donations', {
+            form: { ...forged, reason: '' },
+            headers: { origin: ORIGIN },
+            maxRedirects: 0,
+        });
+        expect(noReason.headers()['location']).toContain('error=');
+    });
+});
+
 test.describe('appearance images', () => {
     test('the cover and logo can be removed, and the choice is sent with the form', async ({ page, context }) => {
         await signIn(context, 'manager@example.org');

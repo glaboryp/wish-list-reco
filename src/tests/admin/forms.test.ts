@@ -9,6 +9,7 @@ import {
   parseManualDonation,
   parseNewCenter,
   parsePaypal,
+  parseVoidDonation,
 } from '../../lib/admin/forms';
 
 const form = (fields: Record<string, string>) => {
@@ -222,5 +223,23 @@ describe('parseFees', () => {
     ['too many decimals', { card_fixed: '0,355' }],
   ])('rejects %s', (_label, override) => {
     expect(parseFees(form({ ...valid, ...override })).ok).toBe(false);
+  });
+});
+
+describe('parseVoidDonation', () => {
+  it('accepts a donation id with a reason', () => {
+    expect(parseVoidDonation(form({ donation_id: UUID, reason: '  reembolso en PayPal ' }))).toEqual({
+      ok: true,
+      value: { donationId: UUID, reason: 'reembolso en PayPal' },
+    });
+  });
+
+  it.each([
+    { donation_id: '1', reason: 'reembolso' },
+    { donation_id: UUID, reason: '' },
+    { donation_id: UUID, reason: 'ab' },
+    { donation_id: UUID, reason: 'x'.repeat(201) },
+  ])('rejects %j', (fields) => {
+    expect(parseVoidDonation(form(fields)).ok).toBe(false);
   });
 });

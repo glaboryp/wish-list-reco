@@ -2,10 +2,10 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, secondaryButtonClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { formatDateTime, formatEuro } from "../../../lib/format";
-import { parseManualDonation } from "../../../lib/admin/forms";
+import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { isUuid } from "../../../lib/ids";
-import { addManualDonation, DONATIONS_PAGE_SIZE, listDonations, voidManualDonation } from "../../../lib/repo/donations";
+import { addManualDonation, DONATIONS_PAGE_SIZE, listDonations, voidManualDonation, voidPaypalDonation } from "../../../lib/repo/donations";
 import { listAdminItems } from "../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
@@ -16,6 +16,15 @@ const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURICompo
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
+
+  if (form.get('intent') === 'void_paypal') {
+    if (!actor.isSuperadmin) return new Response('No tienes acceso a esta acción', { status: 403 });
+    const parsed = parseVoidDonation(form);
+    if (!parsed.ok) return fail(parsed.error);
+    const outcome = await voidPaypalDonation(center.id, parsed.value.donationId, { reason: parsed.value.reason, actorEmail: actor.email });
+    if (outcome === 'missing') return fail('No se pudo anular la donación');
+    return Astro.redirect(`${here}?ok=${outcome === 'voided' ? 'donation-voided' : 'donation-already-voided'}`, 303);
+  }
 
   if (form.get('intent') === 'void') {
     const donationId = String(form.get('donation_id') ?? '');
@@ -162,8 +171,25 @@ const payable = items
                   ? <span class={chipClass.muted}>Anulada</span>
                   : <span class={donation.source === 'paypal' ? chipClass.info : chipClass.muted}>{donation.source === 'paypal' ? 'PayPal' : 'Apuntada a mano'}</span>}
               </td>
-              <td class={tdClass} data-label="Nota">{donation.note ?? ''}</td>
+              <td class={tdClass} data-label="Nota">
+                {donation.note ?? ''}
+                {donation.voided_at && donation.void_reason && (
+                  <span class="block text-sm">Motivo: {donation.void_reason}{donation.voided_by ? ` (${donation.voided_by})` : ''}</span>
+                )}
+              </td>
               <td class="py-2 text-right">
+                {donation.source === 'paypal' && !donation.voided_at && actor.isSuperadmin && (
+                  <details class="text-left">
+                    <summary class="inline-flex min-h-11 cursor-pointer items-center font-semibold text-red-800 underline-offset-4 hover:underline">Anular por reembolso</summary>
+                    <form method="post" class="mt-2 space-y-2" onsubmit="return confirm('¿Anular esta donación de PayPal? Dejará de sumar en el total del artículo. Haz antes el reembolso en PayPal.')">
+                      <input type="hidden" name="intent" value="void_paypal" />
+                      <input type="hidden" name="donation_id" value={donation.id} />
+                      <label class="sr-only" for={`reason-${donation.id}`}>Motivo de la anulación</label>
+                      <input id={`reason-${donation.id}`} name="reason" class={inputClass} placeholder="Motivo, por ejemplo: reembolso en PayPal" minlength="3" maxlength="200" required />
+                      <button type="submit" class={`${dangerButtonClass} px-4!`}>Anular donación</button>
+                    </form>
+                  </details>
+                )}
                 {donation.source === 'manual' && !donation.voided_at && (
                   <form method="post" onsubmit="return confirm('¿Anular esta donación? Dejará de sumar en el total del artículo.')">
                     <input type="hidden" name="intent" value="void" />
