@@ -44,12 +44,23 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   if (text.includes('JOIN centers')) {
     return has(MANAGER_EMAIL) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
   }
+  if (text.includes('SELECT email, firebase_uid')) {
+    return has(RECOLETOS_ID)
+      ? [
+          { email: MANAGER_EMAIL, firebase_uid: 'uid-1', created_at: '2026-01-01T00:00:00Z' },
+          { email: 'second@example.org', firebase_uid: null, created_at: '2026-01-02T00:00:00Z' },
+        ]
+      : [];
+  }
   if (text.includes('FROM center_users')) {
     return has(RECOLETOS_ID) && has(MANAGER_EMAIL) ? [{ ok: 1 }] : [];
   }
   if (text.includes('FROM centers')) {
     const found = centers.filter((center) => has(center.slug));
     return found.length > 0 ? found : values.length === 0 ? centers : [];
+  }
+  if (text.includes('COUNT(*) AS total') && text.includes('FROM donations d')) {
+    return [{ total: has(RECOLETOS_ID) ? '2' : '0', active_sum: has(RECOLETOS_ID) ? '25.00' : '0' }];
   }
   if (text.includes('FROM donations d JOIN items i')) {
     return has(RECOLETOS_ID)
