@@ -1,6 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
+
+const { mockDel } = vi.hoisted(() => ({ mockDel: vi.fn() }));
+vi.mock('@vercel/blob', () => ({ del: mockDel }));
 
 vi.mock('../../lib/db', async () => {
   const { neon, neonConfig } = await import('@neondatabase/serverless');
@@ -406,5 +409,74 @@ describe.skipIf(!databaseUrl)('center appearance images', () => {
 
     await updateAppearance(centerId, { ...base, heroImageUrl: null, logoUrl: null, removeLogo: true });
     expect(await getCenterBySlug(slug)).toMatchObject({ hero_image_url: null, logo_url: null });
+  });
+});
+
+describe.skipIf(!databaseUrl)('deleting files from Blob', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const blob = (name: string) => `https://x.public.blob.vercel-storage.com/it-blob-${suffix}/${name}.png`;
+  let centerId: string;
+  const input = { name: 'Blob', description: '', goal: 50, status: 'active' as const, sortOrder: 9300, imageUrl: null };
+  const look = { name: 'Blob', heroTitle: 't', heroText: 'x', primaryColor: '#007986', removeHeroImage: false, removeLogo: false, heroImageUrl: null, logoUrl: null };
+
+  beforeAll(async () => {
+    centerId = (await createCenter({ slug: `it-blob-${suffix}`, name: 'Blob' }))!.id;
+  });
+
+  beforeEach(() => mockDel.mockReset());
+
+  afterAll(async () => {
+    await sql`DELETE FROM items WHERE center_id = ${centerId}`;
+    await sql`DELETE FROM centers WHERE id = ${centerId}`;
+  });
+
+  it('deletes the file when a gallery image is removed, but not one still used elsewhere', async () => {
+    const item = await createItem(centerId, input);
+    await addItemImage(centerId, item, blob('one'));
+    await addItemImage(centerId, item, blob('two'));
+    const [one, two] = await listItemImages(centerId, item);
+
+    expect(await removeItemImage(centerId, item, one.id)).toBe(true);
+    expect(mockDel).toHaveBeenCalledWith([blob('one')]);
+
+    mockDel.mockReset();
+    const other = await createItem(centerId, { ...input, name: 'Other' });
+    await addItemImage(centerId, other, blob('two'));
+    expect(await removeItemImage(centerId, item, two.id)).toBe(true);
+    expect(mockDel).not.toHaveBeenCalled();
+  });
+
+  it('deletes the old cover and logo when they are replaced or removed, and keeps them when untouched', async () => {
+    await updateAppearance(centerId, { ...look, heroImageUrl: blob('hero1'), logoUrl: blob('logo1') });
+    expect(mockDel).not.toHaveBeenCalled();
+
+    await updateAppearance(centerId, { ...look, name: 'Renamed' });
+    expect(mockDel).not.toHaveBeenCalled();
+
+    await updateAppearance(centerId, { ...look, heroImageUrl: blob('hero2') });
+    expect(mockDel).toHaveBeenLastCalledWith([blob('hero1')]);
+
+    await updateAppearance(centerId, { ...look, removeLogo: true });
+    expect(mockDel).toHaveBeenLastCalledWith([blob('logo1')]);
+
+    await updateAppearance(centerId, { ...look, heroImageUrl: blob('hero2') });
+    expect(mockDel).toHaveBeenCalledTimes(2);
+  });
+
+  it('deletes the images of an item that is deleted, and none when it is only archived', async () => {
+    const gone = await createItem(centerId, { ...input, name: 'Gone' });
+    await addItemImage(centerId, gone, blob('g1'));
+    await addItemImage(centerId, gone, blob('g2'));
+    expect(await removeOrArchiveItem(centerId, gone)).toBe('deleted');
+    expect(mockDel).toHaveBeenCalledTimes(1);
+    expect([...mockDel.mock.calls[0][0]].sort()).toEqual([blob('g1'), blob('g2')]);
+
+    mockDel.mockReset();
+    const kept = await createItem(centerId, { ...input, name: 'Kept' });
+    await addItemImage(centerId, kept, blob('k1'));
+    await recordPaypalDonation({ centerId, itemId: kept, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-blob` });
+    expect(await removeOrArchiveItem(centerId, kept)).toBe('archived');
+    expect(mockDel).not.toHaveBeenCalled();
+    await sql`DELETE FROM donations WHERE item_id = ${kept}`;
   });
 });
