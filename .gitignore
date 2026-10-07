@@ -29,3 +29,7 @@ test-results/
 playwright-report/
 coverage/
 junit.xml
+
+# local tooling
+.claude/
+.impeccable/
