@@ -5,6 +5,7 @@ allowBuilds:
   protobufjs: false
   sharp: false
 overrides:
+  source-map-js: ^1.2.2
   path-to-regexp: 6.3.0
   '@grpc/grpc-js': ^1.14.5
 auditConfig:
