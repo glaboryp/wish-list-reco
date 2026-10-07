@@ -82,6 +82,7 @@ export interface AdminItem {
   imageUrl: string | null;
   imageAlt: string | null;
   donationCount: number;
+  blockingDonationCount: number;
 }
 
 export interface ItemInput {

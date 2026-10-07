@@ -20,6 +20,9 @@ if (Astro.request.method === 'POST') {
     const outcome = await removeCenterUser(center.id, parsed.value, { force: actor.isSuperadmin });
     if (outcome === 'last') return fail('No se puede quitar a la última encargada del centro');
     if (outcome === 'missing') return fail('Ese correo no es encargada de este centro');
+    if (!actor.isSuperadmin && parsed.value === actor.email.toLowerCase()) {
+      return Astro.redirect(`/?left=${encodeURIComponent(center.slug)}`, 303);
+    }
     return Astro.redirect(`${here}?ok=user-removed`, 303);
   }
 
@@ -28,6 +31,7 @@ if (Astro.request.method === 'POST') {
 }
 
 const users = await listCenterUsers(center.id);
+const isSelf = (email: string) => !actor.isSuperadmin && email === actor.email.toLowerCase();
 ---
 
 <AdminLayout
@@ -55,10 +59,15 @@ const users = await listCenterUsers(center.id);
               <span class={user.firebase_uid ? chipClass.ok : chipClass.warn}>{user.firebase_uid ? 'Ya ha entrado' : 'Aún no ha entrado'}</span>
             </td>
             <td class="py-2 text-right">
-              <form method="post" onsubmit="return confirm('¿Quitar el acceso a esta persona?')">
+              <form
+                method="post"
+                data-confirm={isSelf(user.email)
+                  ? `Te quedarás sin acceso a ${center.name}. Para recuperarlo, otra encargada tendrá que darte acceso de nuevo. ¿Continuar?`
+                  : '¿Quitar el acceso a esta persona?'}
+              >
                 <input type="hidden" name="intent" value="remove" />
                 <input type="hidden" name="email" value={user.email} />
-                <button type="submit" class={`${dangerButtonClass} px-4!`}>Quitar acceso</button>
+                <button type="submit" class={`${dangerButtonClass} px-4!`}>{isSelf(user.email) ? 'Dejar de ser encargada' : 'Quitar acceso'}</button>
               </form>
             </td>
           </tr>
@@ -82,3 +91,11 @@ const users = await listCenterUsers(center.id);
     </div>
   </form>
 </AdminLayout>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      if (!confirm(form.dataset.confirm ?? '')) event.preventDefault();
+    });
+  });
+</script>
