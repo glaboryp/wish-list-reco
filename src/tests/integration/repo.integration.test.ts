@@ -79,7 +79,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const item = await createItem(centerA, { ...itemInput, name: 'fees', sortOrder: 9999 });
     expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '10.00', feeAmount: '0.66', currency: 'EUR', captureId: `CAP-${suffix}-fee` })).toBe('created');
     expect(await getAdminItem(centerA, item)).toMatchObject({ raised: 10 });
-    const row = (await listDonations(centerA)).find((donation) => donation.item_id === item)!;
+    const row = (await listDonations(centerA)).rows.find((donation) => donation.item_id === item)!;
     expect(Number(row.amount)).toBe(10);
     expect(Number(row.fee_amount)).toBe(0.66);
     expect(await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-nofee` })).toBe('created');
@@ -87,6 +87,37 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id = ${item}`;
     await sql`DELETE FROM items WHERE id = ${item}`;
+  });
+
+  it('pages and filters donations without leaking other centers', async () => {
+    const itemOne = await createItem(centerA, { ...itemInput, name: 'paged-1', goal: 1000, sortOrder: 9001 });
+    const itemTwo = await createItem(centerA, { ...itemInput, name: 'paged-2', goal: 1000, sortOrder: 9002 });
+    const foreign = await createItem(centerB, { ...itemInput, name: 'foreign', goal: 1000 });
+    for (let n = 0; n < 5; n++) {
+      await recordPaypalDonation({ centerId: centerA, itemId: itemOne, amount: '2.00', currency: 'EUR', captureId: `CAP-${suffix}-p1-${n}` });
+    }
+    await recordPaypalDonation({ centerId: centerA, itemId: itemTwo, amount: '7.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
+    await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-foreign` });
+    await addManualDonation({ centerId: centerA, itemId: itemOne, amount: 3, note: 'to void' });
+    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
+    await voidManualDonation(centerA, manual[0].id);
+
+    const first = await listDonations(centerA, { itemId: itemOne, page: 1, pageSize: 4 });
+    const second = await listDonations(centerA, { itemId: itemOne, page: 2, pageSize: 4 });
+    expect(first.total).toBe(6);
+    expect(first.activeSum).toBe(10);
+    expect(first.rows).toHaveLength(4);
+    expect(second.rows).toHaveLength(2);
+    expect(new Set([...first.rows, ...second.rows].map((row) => row.id)).size).toBe(6);
+    expect([...first.rows, ...second.rows].every((row) => row.item_id === itemOne)).toBe(true);
+
+    const all = await listDonations(centerA, { pageSize: 1000 });
+    expect(all.rows.some((row) => row.item_id === foreign)).toBe(false);
+    expect(await listDonations(centerA, { itemId: foreign })).toMatchObject({ total: 0, rows: [] });
+    expect((await listDonations(centerB, { itemId: foreign })).total).toBe(1);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${itemOne}, ${itemTwo}, ${foreign})`;
+    await sql`DELETE FROM items WHERE id IN (${itemOne}, ${itemTwo}, ${foreign})`;
   });
 
   it('does not count the same PayPal capture twice', async () => {

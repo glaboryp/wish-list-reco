@@ -91,3 +91,16 @@ test.describe('admin access control', () => {
         expect(unknown.status()).toBe(404);
     });
 });
+
+test.describe('donations panel', () => {
+    test('shows the totals and the item filter, and tolerates bad query params', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/donations');
+        await expect(page.getByLabel('Filtrar por artículo')).toBeVisible();
+        await expect(page.getByText(/2 donaciones, 25,00/)).toBeVisible();
+
+        expect((await page.goto('/recoletos/admin/donations?page=999&item=nope'))?.status()).toBe(200);
+        await expect(page.getByText(/2 donaciones/)).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Paginación' })).toHaveCount(0);
+    });
+});
