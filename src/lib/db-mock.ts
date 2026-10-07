@@ -18,7 +18,7 @@ const baseCenter = {
 };
 
 const centers = [
-  { ...baseCenter, id: RECOLETOS_ID, slug: 'recoletos', name: 'Recoletos' },
+  { ...baseCenter, id: RECOLETOS_ID, slug: 'recoletos', name: 'Recoletos', hero_image_url: '/oratorio.webp', logo_url: '/favicon.webp' },
   { ...baseCenter, id: OTRO_ID, slug: 'otro', name: 'Otro centro' },
 ];
 

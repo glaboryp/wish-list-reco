@@ -63,8 +63,8 @@ export async function updateAppearance(centerId: string, input: AppearanceInput)
       hero_title = ${input.heroTitle},
       hero_text = ${input.heroText},
       primary_color = ${input.primaryColor},
-      hero_image_url = COALESCE(${input.heroImageUrl}, hero_image_url),
-      logo_url = COALESCE(${input.logoUrl}, logo_url),
+      hero_image_url = CASE WHEN ${input.removeHeroImage}::boolean THEN NULL ELSE COALESCE(${input.heroImageUrl}, hero_image_url) END,
+      logo_url = CASE WHEN ${input.removeLogo}::boolean THEN NULL ELSE COALESCE(${input.logoUrl}, logo_url) END,
       updated_at = NOW()
     WHERE id = ${centerId}
   `;

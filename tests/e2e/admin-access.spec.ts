@@ -92,6 +92,25 @@ test.describe('admin access control', () => {
     });
 });
 
+test.describe('appearance images', () => {
+    test('the cover and logo can be removed, and the choice is sent with the form', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin');
+
+        const cover = page.locator('[data-upload]', { hasText: 'Imagen de portada' });
+        const logo = page.locator('[data-upload]', { hasText: 'Logo del centro' });
+        await expect(cover.getByRole('button', { name: 'Quitar imagen' })).toBeVisible();
+        await expect(cover.locator('[data-remove-flag]')).toHaveValue('');
+
+        await cover.getByRole('button', { name: 'Quitar imagen' }).click();
+        await expect(cover.locator('[data-remove-flag]')).toHaveValue('1');
+        await expect(cover.getByRole('button', { name: 'Quitar imagen' })).toBeHidden();
+        await expect(cover.getByText('Elegir imagen')).toBeVisible();
+        await expect(logo.locator('[data-remove-flag]')).toHaveValue('');
+        await expect(logo.getByRole('button', { name: 'Quitar imagen' })).toBeVisible();
+    });
+});
+
 test.describe('manager removing themselves', () => {
     test('asks for a clear confirmation and ends on a readable page, not a bare 403', async ({ page, context }) => {
         await signIn(context, 'manager@example.org');

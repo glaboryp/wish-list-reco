@@ -101,6 +101,8 @@ export interface AppearanceInput {
   primaryColor: string;
   heroImageUrl: string | null;
   logoUrl: string | null;
+  removeHeroImage: boolean;
+  removeLogo: boolean;
 }
 
 export interface PayPalSettingsInput {
