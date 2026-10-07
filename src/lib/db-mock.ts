@@ -59,6 +59,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     const found = centers.filter((center) => has(center.slug));
     return found.length > 0 ? found : values.length === 0 ? centers : [];
   }
+  if (text.includes('COUNT(*) AS total') && text.includes('FROM donations d')) {
+    return [{ total: has(RECOLETOS_ID) ? '2' : '0', active_sum: has(RECOLETOS_ID) ? '25.00' : '0' }];
+  }
   if (text.includes('FROM donations d JOIN items i')) {
     return has(RECOLETOS_ID)
       ? [
