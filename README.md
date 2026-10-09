@@ -43,13 +43,38 @@ pnpm dev                      # http://localhost:4321
 
 Los archivos SQL están en `db/migrations/` y se aplican en orden con `node --env-file=.env scripts/migrate.mjs` (se registran en `schema_migrations`). Prueba siempre antes en una rama de Neon.
 
+`000_baseline.sql` crea el esquema original (`items`, `item_images`, `item_status`) con `IF NOT EXISTS`, así que una base vacía queda completa tras ejecutar el script y en producción, donde ya existe, no cambia nada.
+
+## Base de datos local
+
+El driver de Neon habla HTTP, así que en local hace falta Postgres más el proxy HTTP de Neon:
+
+```bash
+docker network create wish-net
+docker run -d --name wish-pg --network wish-net -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=main -p 5432:5432 postgres:17
+docker run -d --name wish-proxy --network wish-net -p 4444:4444 \
+  -e PG_CONNECTION_STRING=postgres://postgres:postgres@wish-pg:5432/main \
+  ghcr.io/timowilhelm/local-neon-http-proxy:main
+docker exec wish-pg psql -U postgres main -c "CREATE SCHEMA neon_control_plane; CREATE TABLE neon_control_plane.endpoints (endpoint_id text PRIMARY KEY, allowed_ips text[])"
+
+export POSTGRES_URL=postgres://postgres:postgres@db.localtest.me:5432/main
+export NEON_FETCH_ENDPOINT=http://db.localtest.me:4444/sql
+node scripts/migrate.mjs
+```
+
+`db.localtest.me` resuelve a `127.0.0.1`; el proxy necesita ese nombre de host. `NEON_FETCH_ENDPOINT` solo se usa con el proxy: no lo definas contra Neon.
+
 ## Tests
 
 ```bash
 pnpm test:unit                                  # Vitest
 pnpm test:e2e                                   # Playwright (base de datos simulada)
-TEST_DATABASE_URL=<rama de Neon> pnpm exec vitest run src/tests/integration
+
+TEST_DATABASE_URL=$POSTGRES_URL TEST_NEON_FETCH_ENDPOINT=$NEON_FETCH_ENDPOINT \
+  pnpm exec vitest run src/tests/integration    # contra la base local de arriba
 ```
+
+CI ejecuta el job `Integration` en cada PR con el mismo Postgres y proxy como servicios, aplica las migraciones y lanza los tests de integración.
 
 ## Alta de un centro nuevo
 
