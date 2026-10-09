@@ -65,6 +65,7 @@ const pageHref = (target: number) => {
   const query = params.toString();
   return query ? `${here}?${query}` : here;
 };
+const csvHref = itemFilter ? `${here}.csv?item=${itemFilter}` : `${here}.csv`;
 const payable = items
   .filter((item) => item.status !== 'archived')
   .map((item) => ({ item, remaining: Math.round((item.goal - item.raised) * 100) / 100 }))
@@ -132,6 +133,7 @@ const payable = items
         </select>
       </div>
       <button type="submit" class={secondaryButtonClass}>Filtrar</button>
+      <a href={csvHref} class={secondaryButtonClass} download>Exportar CSV</a>
       {itemFilter && <a href={here} class="inline-flex min-h-11 items-center font-semibold text-brand underline-offset-4 hover:underline">Quitar filtro</a>}
     </form>
     <p class="mb-4 text-base text-muted" data-summary>

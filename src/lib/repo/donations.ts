@@ -1,5 +1,6 @@
 import sql from '../db';
-import type { DonationRow } from '../../types/database';
+import { listAdminItems } from './items';
+import type { AdminItem, DonationRow } from '../../types/database';
 
 export async function recordPaypalDonation(input: {
   centerId: string;
@@ -111,4 +112,31 @@ export async function listDonations(
     total: Number(totals[0].total),
     activeSum: parseFloat(totals[0].active_sum),
   };
+}
+
+export async function listAllDonations(centerId: string, itemId: string | null = null): Promise<DonationRow[]> {
+  const rows = await sql`
+    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
+    FROM donations d JOIN items i ON i.id = d.item_id
+    WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
+    ORDER BY d.created_at DESC, d.id DESC
+  `;
+  return rows as DonationRow[];
+}
+
+export const RECENT_DONATIONS_LIMIT = 5;
+
+export interface DashboardData {
+  netRaised: number;
+  donationCount: number;
+  recent: DonationRow[];
+  items: AdminItem[];
+}
+
+export async function getDashboard(centerId: string): Promise<DashboardData> {
+  const [page, items] = await Promise.all([
+    listDonations(centerId, { page: 1, pageSize: RECENT_DONATIONS_LIMIT }),
+    listAdminItems(centerId),
+  ]);
+  return { netRaised: page.activeSum, donationCount: page.total, recent: page.rows, items };
 }

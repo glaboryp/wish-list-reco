@@ -17,7 +17,7 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { addManualDonation, getDashboard, listAllDonations, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
@@ -154,6 +154,31 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id IN (${itemOne}, ${itemTwo}, ${foreign})`;
     await sql`DELETE FROM items WHERE id IN (${itemOne}, ${itemTwo}, ${foreign})`;
+  });
+
+  it('exports all donations of one center and matches the dashboard to the list totals', async () => {
+    const item = await createItem(centerA, { ...itemInput, name: 'export-1', goal: 1000, sortOrder: 9100 });
+    const foreign = await createItem(centerB, { ...itemInput, name: 'export-foreign', goal: 1000 });
+    for (let n = 0; n < 7; n++) {
+      await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '4.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-${n}` });
+    }
+    await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-foreign` });
+    await voidPaypalDonation(centerA, (await listDonations(centerA, { itemId: item })).rows[0].id, { reason: 'test', actorEmail: 'a@b.c' });
+
+    const exported = await listAllDonations(centerA, item);
+    expect(exported).toHaveLength(7);
+    expect(await listAllDonations(centerA, foreign)).toEqual([]);
+    expect((await listAllDonations(centerA)).some((row) => row.item_id === foreign)).toBe(false);
+
+    const list = await listDonations(centerA, { pageSize: 1000 });
+    const dashboard = await getDashboard(centerA);
+    expect(dashboard.donationCount).toBe(list.total);
+    expect(dashboard.netRaised).toBe(list.activeSum);
+    expect(dashboard.recent.length).toBeLessThanOrEqual(5);
+    expect(dashboard.items.some((entry) => entry.id === item)).toBe(true);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${item}, ${foreign})`;
+    await sql`DELETE FROM items WHERE id IN (${item}, ${foreign})`;
   });
 
   it('does not count the same PayPal capture twice', async () => {
