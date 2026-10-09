@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { captureOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
+import { notifyDonation } from '../../../../lib/email/notify';
 import { recordPaypalDonation } from '../../../../lib/repo/donations';
 
 const json = (body: unknown, status = 200) =>
@@ -68,6 +69,10 @@ export const POST: APIRoute = async ({ params, request }) => {
   if (outcome === 'item_not_found') {
     console.error('Donación capturada para un artículo que no pertenece al centro', failure);
     return json(failure, 500);
+  }
+
+  if (outcome === 'created') {
+    await notifyDonation({ center, itemId: capture.itemId, amount: creditedAmount, donorEmail: capture.payerEmail });
   }
 
   return json({

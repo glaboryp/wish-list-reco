@@ -75,10 +75,17 @@ describe('createOrder', () => {
   });
 });
 
+describe('captureOrder payer email', () => {
+  it('reads the payer email from the capture response', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'T' })).mockResolvedValueOnce(ok({ ...completed, payer: { email_address: 'donor@example.org' } }));
+    expect((await captureOrder(creds, 'ORDER-1')).payerEmail).toBe('donor@example.org');
+  });
+});
+
 describe('captureOrder', () => {
   it('returns the capture details', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(completed));
-    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null });
+    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: null });
   });
 
   it('recovers an already captured order by reading it back', async () => {

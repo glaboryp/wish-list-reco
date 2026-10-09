@@ -27,6 +27,7 @@ Copia `.env.example` a `.env` y rellénalo:
 | `POSTGRES_URL` | Conexión a Neon |
 | `BLOB_READ_WRITE_TOKEN` | Subida de imágenes |
 | `ENCRYPTION_KEY` | Clave de cifrado de los secrets de PayPal (`openssl rand -base64 32`) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Avisos por correo de las donaciones con [Resend](https://resend.com) (remitente verificado). Opcionales: si faltan, no se envía ningún correo |
 | `SESSION_SECRET` | Firma de la cookie de sesión (`openssl rand -base64 48`) |
 | `SUPERADMIN_EMAIL` | Único superadmin |
 | `PUBLIC_FIREBASE_API_KEY`, `PUBLIC_FIREBASE_AUTH_DOMAIN`, `PUBLIC_FIREBASE_PROJECT_ID` | Configuración web de Firebase |

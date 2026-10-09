@@ -1,8 +1,9 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
-import { parseEmail } from "../../../lib/admin/forms";
+import { parseEmail, parseNotifySettings } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
+import { updateNotifySettings } from "../../../lib/repo/centers";
 import { addCenterUser, listCenterUsers, removeCenterUser } from "../../../lib/repo/users";
 
 const guard = await guardCenter(Astro);
@@ -13,6 +14,12 @@ const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURICompo
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
+  if (form.get('intent') === 'notify') {
+    const settings = parseNotifySettings(form);
+    if (!settings.ok) return fail(settings.error);
+    await updateNotifySettings(center.id, settings.value);
+    return Astro.redirect(`${here}?ok=notify-saved`, 303);
+  }
   const parsed = parseEmail(form.get('email'));
   if (!parsed.ok) return fail(parsed.error);
 
@@ -88,6 +95,31 @@ const isSelf = (email: string) => !actor.isSuperadmin && email === actor.email.t
     </div>
     <div class={formFooterClass}>
       <button type="submit" class={buttonClass}>Dar acceso</button>
+    </div>
+  </form>
+
+  <form method="post" class={`${cardClass} space-y-5`}>
+    <input type="hidden" name="intent" value="notify" />
+    <div>
+      <h2 class="text-xl font-bold text-ink">Avisos por correo</h2>
+      <p class="mt-1 text-base text-muted">Cuando alguien dona por PayPal, avisamos por correo a las personas de la lista de arriba.</p>
+    </div>
+    <fieldset class="space-y-3">
+      <legend class="sr-only">Cuándo avisar</legend>
+      <label class="flex items-start gap-3 text-base text-ink">
+        <input type="radio" name="notify_mode" value="each" checked={center.notify_mode !== 'none'} class="mt-1.5" />
+        <span>Avisarme con cada donación</span>
+      </label>
+      <label class="flex items-start gap-3 text-base text-ink">
+        <input type="radio" name="notify_mode" value="none" checked={center.notify_mode === 'none'} class="mt-1.5" />
+        <span>No avisar</span>
+      </label>
+    </fieldset>
+    <p class={helpClass}>
+      A quien dona le enviamos siempre un correo de agradecimiento con el correo que facilita PayPal. Ese correo no se guarda en ninguna parte.
+    </p>
+    <div class={formFooterClass}>
+      <button type="submit" class={buttonClass}>Guardar avisos</button>
     </div>
   </form>
 </AdminLayout>
