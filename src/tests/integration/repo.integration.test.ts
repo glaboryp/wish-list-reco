@@ -5,6 +5,12 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
 const { mockDel } = vi.hoisted(() => ({ mockDel: vi.fn() }));
 vi.mock('@vercel/blob', () => ({ del: mockDel }));
 
+const { mockLookupOrder } = vi.hoisted(() => ({ mockLookupOrder: vi.fn() }));
+vi.mock('../../lib/paypal', () => ({
+  lookupOrder: mockLookupOrder,
+  credentialsFor: () => ({ clientId: 'cid', clientSecret: 'secret', env: 'sandbox' }),
+}));
+
 vi.mock('../../lib/db', async () => {
   const { neon, neonConfig } = await import('@neondatabase/serverless');
   if (process.env.TEST_NEON_FETCH_ENDPOINT) {
@@ -31,6 +37,8 @@ import {
   setCoverImage,
   updateItem,
 } from '../../lib/repo/items';
+import { reconcilePendingCaptures } from '../../lib/paypal-reconcile';
+import { listUnresolvedCaptures, recordPendingCapture } from '../../lib/repo/pending-captures';
 import { addCenterUser, findMembership, removeCenterUser } from '../../lib/repo/users';
 
 const itemInput = {
@@ -478,5 +486,72 @@ describe.skipIf(!databaseUrl)('deleting files from Blob', () => {
     expect(await removeOrArchiveItem(centerId, kept)).toBe('archived');
     expect(mockDel).not.toHaveBeenCalled();
     await sql`DELETE FROM donations WHERE item_id = ${kept}`;
+  });
+});
+
+describe.skipIf(!databaseUrl)('reconciling PayPal captures', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  let center: string;
+  let item: string;
+  const order = (n: string) => `ORD-${suffix}-${n}`;
+  const capture = { captureId: `CAP-${suffix}`, amount: '10.66', currency: 'EUR', itemId: '', donationAmount: '10.00' };
+  const status = async (id: string) => (await sql`SELECT status FROM pending_captures WHERE paypal_order_id = ${id}`)[0]?.status;
+  const age = (id: string, interval: string) =>
+    sql`UPDATE pending_captures SET created_at = NOW() - ${interval}::interval WHERE paypal_order_id = ${id}`;
+  const run = () => reconcilePendingCaptures({ encryptionKey: 'k' });
+
+  beforeAll(async () => {
+    center = (await createCenter({ slug: `it-rec-${suffix}`, name: 'Reconcile' }))!.id;
+    item = await createItem(center, itemInput);
+    capture.itemId = item;
+  });
+
+  beforeEach(() => mockLookupOrder.mockReset());
+
+  afterAll(async () => {
+    await sql`DELETE FROM pending_captures WHERE center_id = ${center}`;
+    await sql`DELETE FROM donations WHERE center_id = ${center}`;
+    await sql`DELETE FROM items WHERE center_id = ${center}`;
+    await sql`DELETE FROM centers WHERE id = ${center}`;
+  });
+
+  it('recovers a captured payment whose donation insert failed, without duplicating it', async () => {
+    await recordPendingCapture({ orderId: order('ok'), centerId: center, itemId: item, amount: '10.66' });
+    await age(order('ok'), '10 minutes');
+    mockLookupOrder.mockResolvedValue({ state: 'completed', capture });
+
+    expect(await run()).toMatchObject({ recorded: 1 });
+    expect(await status(order('ok'))).toBe('recorded');
+    const donations = await sql`SELECT amount, fee_amount, source FROM donations WHERE paypal_capture_id = ${capture.captureId}`;
+    expect(donations).toHaveLength(1);
+    expect(donations[0]).toMatchObject({ amount: '10.00', fee_amount: '0.66', source: 'paypal' });
+
+    await sql`UPDATE pending_captures SET status = 'pending', resolved_at = NULL WHERE paypal_order_id = ${order('ok')}`;
+    expect(await run()).toMatchObject({ recorded: 1 });
+    expect(await sql`SELECT 1 FROM donations WHERE paypal_capture_id = ${capture.captureId}`).toHaveLength(1);
+  });
+
+  it('ignores orders that are too recent', async () => {
+    await recordPendingCapture({ orderId: order('new'), centerId: center, itemId: item, amount: '5.00' });
+    expect(await run()).toMatchObject({ checked: 0 });
+    expect(await status(order('new'))).toBe('pending');
+  });
+
+  it('exposes unresolved orders and hides abandoned ones', async () => {
+    await recordPendingCapture({ orderId: order('abandoned'), centerId: center, itemId: item, amount: '5.00' });
+    await recordPendingCapture({ orderId: order('approved'), centerId: center, itemId: item, amount: '7.00' });
+    await age(order('abandoned'), '5 hours');
+    await age(order('approved'), '5 hours');
+    mockLookupOrder.mockImplementation(async (_credentials: unknown, id: string) => ({
+      state: 'not_completed',
+      status: id === order('approved') ? 'APPROVED' : 'CREATED',
+    }));
+
+    await run();
+    expect(await status(order('abandoned'))).toBe('not_paid');
+    expect(await status(order('approved'))).toBe('needs_review');
+    const unresolved = (await listUnresolvedCaptures()).filter((row) => row.center_id === center);
+    expect(unresolved.map((row) => row.paypal_order_id)).toEqual([order('approved')]);
+    expect(unresolved[0].item_name).toBe('Cáliz');
   });
 });

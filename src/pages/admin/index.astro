@@ -5,6 +5,7 @@ import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputCla
 import { parseNewCenter } from "../../lib/admin/forms";
 import { guardSuperadmin } from "../../lib/auth/guard";
 import { createCenter, listCenters } from "../../lib/repo/centers";
+import { listUnresolvedCaptures } from "../../lib/repo/pending-captures";
 
 const guard = await guardSuperadmin(Astro);
 if (guard instanceof Response) return guard;
@@ -18,7 +19,8 @@ if (Astro.request.method === 'POST') {
   return Astro.redirect(`/admin/centers/${created.slug}?ok=center-created`, 303);
 }
 
-const centers = await listCenters();
+const [centers, unresolved] = await Promise.all([listCenters(), listUnresolvedCaptures()]);
+const centerNames = new Map(centers.map((center) => [center.id, center.name]));
 const host = Astro.url.host;
 ---
 
@@ -28,6 +30,37 @@ const host = Astro.url.host;
   actor={actor}
   active="centers"
 >
+  {unresolved.length > 0 && (
+    <section class={`${cardClass} space-y-3`} data-testid="unresolved-captures" aria-labelledby="unresolved-title">
+      <h2 id="unresolved-title" class="text-xl font-bold text-ink">
+        {unresolved.length === 1 ? '1 cobro de PayPal sin registrar' : `${unresolved.length} cobros de PayPal sin registrar`}
+      </h2>
+      <p class="text-base text-muted">PayPal puede haber cobrado estas órdenes pero la donación no consta en la web. Revisa cada una en PayPal y, si el cobro existe, añádela a mano en el panel del centro.</p>
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th class={thClass}>Centro</th>
+            <th class={thClass}>Artículo</th>
+            <th class={thClass}>Importe</th>
+            <th class={thClass}>Orden de PayPal</th>
+            <th class={thClass}>Fecha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {unresolved.map((capture) => (
+            <tr>
+              <td class={tdClass} data-label="Centro">{centerNames.get(capture.center_id) ?? capture.center_id}</td>
+              <td class={tdClass} data-label="Artículo">{capture.item_name ?? '—'}</td>
+              <td class={tdClass} data-label="Importe">{capture.amount} €</td>
+              <td class={`${tdClass} font-mono text-sm`} data-label="Orden de PayPal">{capture.paypal_order_id}</td>
+              <td class={tdClass} data-label="Fecha">{new Date(capture.created_at).toLocaleString('es-ES')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )}
+
   <div class={cardClass}>
     {centers.length === 0 ? (
       <p class="text-base text-muted">Todavía no hay centros. Crea el primero con el formulario de más abajo.</p>
