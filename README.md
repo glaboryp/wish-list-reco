@@ -29,7 +29,12 @@ Copia `.env.example` a `.env` y rellénalo:
 | `ENCRYPTION_KEY` | Clave de cifrado de los secrets de PayPal (`openssl rand -base64 32`) |
 | `SESSION_SECRET` | Firma de la cookie de sesión (`openssl rand -base64 48`) |
 | `SUPERADMIN_EMAIL` | Único superadmin |
+| `CRON_SECRET` | Protege `/api/cron/paypal-sync`, que Vercel Cron llama a diario (`openssl rand -base64 32`). Debe estar definida en Vercel |
 | `PUBLIC_FIREBASE_API_KEY`, `PUBLIC_FIREBASE_AUTH_DOMAIN`, `PUBLIC_FIREBASE_PROJECT_ID` | Configuración web de Firebase |
+
+## Cron de PayPal
+
+`vercel.json` programa una llamada diaria a `GET /api/cron/paypal-sync` (cabecera `Authorization: Bearer $CRON_SECRET`; sin ella responde 401). Cada ejecución concilia las capturas pendientes y comprueba en PayPal las donaciones vigentes de los últimos 90 días (máx. 100 por centro): anula las reembolsadas por completo (motivo "Reembolso en PayPal", sin usuario) y lista las reembolsadas parcialmente en el resumen JSON, que también queda en los logs de Vercel, para revisarlas a mano.
 
 ## Desarrollo local
 

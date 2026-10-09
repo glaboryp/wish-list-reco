@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encryptSecret } from '../../lib/crypto';
-import { apiBase, captureOrder, clearTokenCache, lookupOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
+import { apiBase, captureOrder, clearTokenCache, lookupCaptureRefund, lookupOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
 import type { CenterWithSecret } from '../../types/database';
 
 const key = Buffer.alloc(32, 1).toString('base64');
@@ -249,5 +249,24 @@ describe('lookupOrder', () => {
   it('throws on other lookup failures', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(fail(500, {}));
     await expect(lookupOrder(creds, 'ORDER-1')).rejects.toBeInstanceOf(PayPalError);
+  });
+});
+
+describe('lookupCaptureRefund', () => {
+  const lookup = (response: unknown) => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(response);
+    return lookupCaptureRefund(creds, 'CAP1');
+  };
+
+  it('maps the capture status', async () => {
+    expect(await lookup(ok({ status: 'REFUNDED' }))).toBe('refunded');
+    expect(await lookup(ok({ status: 'PARTIALLY_REFUNDED' }))).toBe('partially_refunded');
+    expect(await lookup(ok({ status: 'COMPLETED' }))).toBe('not_refunded');
+    expect(await lookup(fail(404, {}))).toBe('not_found');
+  });
+
+  it('queries the capture endpoint and throws on other failures', async () => {
+    await expect(lookup(fail(500, {}))).rejects.toBeInstanceOf(PayPalError);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/v2/payments/captures/CAP1');
   });
 });
