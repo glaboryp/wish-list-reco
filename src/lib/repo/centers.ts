@@ -47,6 +47,12 @@ export async function getCenterWithSecret(slug: string): Promise<CenterWithSecre
   return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
 }
 
+export async function getCenterWithSecretById(id: string): Promise<CenterWithSecret | null> {
+  const rows = await sql`SELECT * FROM centers WHERE id = ${id} LIMIT 1`;
+  if (rows.length === 0) return null;
+  return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
+}
+
 export async function createCenter(input: { slug: string; name: string }): Promise<Center | null> {
   const rows = await sql`
     INSERT INTO centers (slug, name, hero_title)

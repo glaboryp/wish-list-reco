@@ -45,7 +45,18 @@ async function safeJson(res: Response): Promise<any> {
   }
 }
 
+const TOKEN_SAFETY_MARGIN_MS = 60_000;
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+export function clearTokenCache(): void {
+  tokenCache.clear();
+}
+
 async function accessToken(credentials: PayPalCredentials): Promise<string> {
+  const cacheKey = `${credentials.env}:${credentials.clientId}:${credentials.clientSecret}`;
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+
   const basic = Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`).toString('base64');
   const res = await fetch(`${apiBase(credentials.env)}/v1/oauth2/token`, {
     method: 'POST',
@@ -54,6 +65,10 @@ async function accessToken(credentials: PayPalCredentials): Promise<string> {
   });
   const data = await safeJson(res);
   if (!res.ok || !data.access_token) throw new PayPalError('token request failed', res.status);
+  const lifetimeMs = Number(data.expires_in) * 1000;
+  if (Number.isFinite(lifetimeMs) && lifetimeMs > TOKEN_SAFETY_MARGIN_MS) {
+    tokenCache.set(cacheKey, { token: data.access_token, expiresAt: Date.now() + lifetimeMs - TOKEN_SAFETY_MARGIN_MS });
+  }
   return data.access_token;
 }
 
@@ -118,6 +133,10 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
     if (!readBack.ok) throw new PayPalError('order lookup failed', readBack.status);
   }
 
+  return completedCapture(data);
+}
+
+function completedCapture(data: any): CaptureResult {
   if (data.status !== 'COMPLETED') throw new PayPalError(`order not completed: ${data.status}`);
   const captures = data.purchase_units?.[0]?.payments?.captures ?? [];
   const capture = captures.find((c: any) => c.status === 'COMPLETED');
@@ -132,4 +151,18 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
     itemId,
     donationAmount,
   };
+}
+
+export type OrderLookup = { state: 'completed'; capture: CaptureResult } | { state: 'not_completed'; status: string } | { state: 'not_found' };
+
+export async function lookupOrder(credentials: PayPalCredentials, orderId: string): Promise<OrderLookup> {
+  const token = await accessToken(credentials);
+  const res = await fetch(`${apiBase(credentials.env)}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (res.status === 404) return { state: 'not_found' };
+  const data = await safeJson(res);
+  if (!res.ok) throw new PayPalError('order lookup failed', res.status);
+  if (data.status !== 'COMPLETED') return { state: 'not_completed', status: String(data.status) };
+  return { state: 'completed', capture: completedCapture(data) };
 }
