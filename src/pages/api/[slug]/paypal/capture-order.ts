@@ -2,9 +2,8 @@ import type { APIRoute } from 'astro';
 import { captureOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { recordPaypalDonation } from '../../../../lib/repo/donations';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+import { json } from '../../../../lib/http';
+import { centsToDecimalString, toCents } from '../../../../lib/money';
 
 export const POST: APIRoute = async ({ params, request }) => {
   const center = await getCenterWithSecret(params.slug ?? '');
@@ -48,7 +47,7 @@ export const POST: APIRoute = async ({ params, request }) => {
   }
 
   const creditedAmount = capture.donationAmount ?? capture.amount;
-  const feeCents = Math.round(parseFloat(capture.amount) * 100) - Math.round(parseFloat(creditedAmount) * 100);
+  const feeCents = toCents(capture.amount) - toCents(creditedAmount);
 
   let outcome;
   try {
@@ -56,7 +55,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       centerId: center.id,
       itemId: capture.itemId,
       amount: creditedAmount,
-      feeAmount: (feeCents / 100).toFixed(2),
+      feeAmount: centsToDecimalString(feeCents),
       currency: capture.currency,
       captureId: capture.captureId,
     });

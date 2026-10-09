@@ -42,7 +42,7 @@ export async function addManualDonation(input: {
   `;
   if (rows.length > 0) return { status: 'created' };
 
-  const item = await sql`
+  const item = await sql<{ remaining: string }>`
     SELECT GREATEST(i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0), 0) AS remaining
     FROM items i WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
   `;
@@ -93,21 +93,21 @@ export async function listDonations(
   const offset = (Math.max(1, options.page ?? 1) - 1) * pageSize;
 
   const [rows, totals] = await Promise.all([
-    sql`
+    sql<DonationRow>`
       SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
       FROM donations d JOIN items i ON i.id = d.item_id
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
       ORDER BY d.created_at DESC, d.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `,
-    sql`
+    sql<{ total: string; active_sum: string }>`
       SELECT COUNT(*) AS total, COALESCE(SUM(d.amount) FILTER (WHERE d.voided_at IS NULL), 0) AS active_sum
       FROM donations d
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
     `,
   ]);
   return {
-    rows: rows as DonationRow[],
+    rows,
     total: Number(totals[0].total),
     activeSum: parseFloat(totals[0].active_sum),
   };

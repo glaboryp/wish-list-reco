@@ -91,11 +91,3 @@ const isSelf = (email: string) => !actor.isSuperadmin && email === actor.email.t
     </div>
   </form>
 </AdminLayout>
-
-<script>
-  document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
-    form.addEventListener('submit', (event) => {
-      if (!confirm(form.dataset.confirm ?? '')) event.preventDefault();
-    });
-  });
-</script>

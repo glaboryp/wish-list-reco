@@ -73,7 +73,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await addManualDonation({ centerId: centerA, itemId: itemA, amount: 40, note: 'efectivo' })).toEqual({ status: 'created' });
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 100, status: 'funded' });
 
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
     expect(await voidManualDonation(centerA, manual[0].id)).toBe(true);
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 60, status: 'active' });
   });
@@ -97,7 +97,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: id, amount: '20.00', currency: 'EUR', captureId: `CAP-${suffix}-refund` });
     expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 20 });
     expect((await listPublicItems(centerA)).find((item) => item.id === id)).toMatchObject({ status: 'funded' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
 
     expect(await voidPaypalDonation(centerB, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     expect(await voidPaypalDonation(centerA, donation, { reason: 'reembolso', actorEmail: 'boss@example.org' })).toBe('voided');
@@ -117,7 +117,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
   it('does not let manual donations be voided as PayPal ones or carry void metadata', async () => {
     const id = await createItem(centerA, { ...itemInput, name: 'manual-only', sortOrder: 9201 });
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: '' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
     expect(await voidPaypalDonation(centerA, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     await expect(sql`UPDATE donations SET void_reason = 'x' WHERE id = ${donation}`).rejects.toThrow();
 
@@ -135,7 +135,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: itemTwo, amount: '7.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
     await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-foreign` });
     await addManualDonation({ centerId: centerA, itemId: itemOne, amount: 3, note: 'to void' });
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
     await voidManualDonation(centerA, manual[0].id);
 
     const first = await listDonations(centerA, { itemId: itemOne, page: 1, pageSize: 4 });
@@ -185,7 +185,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: 'b' });
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 2 });
 
-    for (const row of await sql`SELECT id FROM donations WHERE item_id = ${id}`) {
+    for (const row of await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`) {
       await voidManualDonation(centerA, row.id);
     }
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 0 });
@@ -199,7 +199,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const live = await createItem(centerA, { ...itemInput, name: 'one-live', sortOrder: 9101 });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 10, note: 'voided' });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 5, note: 'live' });
-    const first = await sql`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
+    const first = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
     await voidManualDonation(centerA, first[0].id);
     expect(await removeOrArchiveItem(centerA, live)).toBe('archived');
     expect(await getAdminItem(centerA, live)).toMatchObject({ status: 'archived', donationCount: 2, blockingDonationCount: 1 });

@@ -5,6 +5,7 @@ import { isUuid } from "../../../lib/ids";
 import { getCenterBySlug } from "../../../lib/repo/centers";
 import Icon from "../../../components/Icon.astro";
 import { formatEuro } from "../../../lib/format";
+import { fromCents, remainingCents } from "../../../lib/money";
 import { getItemImages, getPublicItem } from "../../../lib/repo/items";
 
 const { slug, id } = Astro.params;
@@ -25,7 +26,7 @@ if (!item) {
 const images = await getItemImages(item.id);
 const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
 const isFunded = item.status === 'funded';
-const remaining = Math.max(0, item.goal - item.raised);
+const remaining = fromCents(remainingCents(item.goal, item.raised));
 const maxDonation = Math.ceil(remaining);
 const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_client_id : null;
 ---

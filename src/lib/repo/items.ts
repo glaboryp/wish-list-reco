@@ -4,7 +4,7 @@ import { sortForPublic, toWishlistItem } from '../items';
 import type { AdminItem, DBItemImage, ItemInput, ItemRow, WishlistItem } from '../../types/database';
 
 export async function listPublicItems(centerId: string): Promise<WishlistItem[]> {
-  const rows = await sql`
+  const rows = await sql<ItemRow>`
     SELECT
       i.id, i.center_id, i.name, i.description, i.goal_amount, i.status, i.sort_order, i.created_at, i.updated_at,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
@@ -14,11 +14,11 @@ export async function listPublicItems(centerId: string): Promise<WishlistItem[]>
     WHERE i.center_id = ${centerId} AND i.status IN ('active', 'funded')
     ORDER BY i.sort_order ASC, i.created_at ASC
   `;
-  return sortForPublic((rows as ItemRow[]).map(toWishlistItem));
+  return sortForPublic(rows.map(toWishlistItem));
 }
 
 export async function getPublicItem(centerId: string, itemId: string): Promise<WishlistItem | null> {
-  const rows = await sql`
+  const rows = await sql<ItemRow>`
     SELECT
       i.id, i.center_id, i.name, i.description, i.goal_amount, i.status, i.sort_order, i.created_at, i.updated_at,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
@@ -28,15 +28,15 @@ export async function getPublicItem(centerId: string, itemId: string): Promise<W
     WHERE i.id = ${itemId} AND i.center_id = ${centerId} AND i.status IN ('active', 'funded')
     LIMIT 1
   `;
-  return rows.length > 0 ? toWishlistItem(rows[0] as ItemRow) : null;
+  return rows.length > 0 ? toWishlistItem(rows[0]) : null;
 }
 
 export async function getItemImages(itemId: string): Promise<DBItemImage[]> {
-  const rows = await sql`
+  const rows = await sql<DBItemImage>`
     SELECT id, item_id, image_url, alt_text, sort_order, created_at
     FROM item_images WHERE item_id = ${itemId} ORDER BY sort_order ASC
   `;
-  return rows as DBItemImage[];
+  return rows;
 }
 
 function toAdminItem(row: any): AdminItem {
@@ -142,13 +142,13 @@ export async function updateItem(centerId: string, itemId: string, input: ItemIn
 }
 
 export async function listItemImages(centerId: string, itemId: string): Promise<DBItemImage[]> {
-  const rows = await sql`
+  const rows = await sql<DBItemImage>`
     SELECT img.id, img.item_id, img.image_url, img.alt_text, img.sort_order, img.created_at
     FROM item_images img JOIN items i ON i.id = img.item_id
     WHERE img.item_id = ${itemId} AND i.center_id = ${centerId}
     ORDER BY img.sort_order ASC, img.created_at ASC, img.id ASC
   `;
-  return rows as DBItemImage[];
+  return rows;
 }
 
 async function resequenceImages(itemId: string, firstId: string | null): Promise<void> {
@@ -181,7 +181,7 @@ export async function addItemImage(centerId: string, itemId: string, url: string
 }
 
 export async function removeItemImage(centerId: string, itemId: string, imageId: string): Promise<boolean> {
-  const rows = await sql`
+  const rows = await sql<{ id: string; image_url: string | null }>`
     DELETE FROM item_images
     WHERE id = ${imageId} AND item_id = ${itemId}
       AND EXISTS (SELECT 1 FROM items WHERE id = ${itemId} AND center_id = ${centerId})
@@ -207,7 +207,7 @@ export async function removeOrArchiveItem(
   centerId: string,
   itemId: string,
 ): Promise<'deleted' | 'archived' | 'missing'> {
-  const rows = await sql`
+  const rows = await sql<{ deleted: string; archived: string; cleared: string; image_urls: (string | null)[] | null }>`
     WITH blocked AS (
       SELECT EXISTS (
         SELECT 1 FROM donations
