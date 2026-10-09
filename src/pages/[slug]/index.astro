@@ -24,13 +24,13 @@ const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item
     style="background: linear-gradient(135deg, var(--primary-hover), var(--primary));"
   >
     {center.hero_image_url && (
-      <img src={center.hero_image_url} alt="" class="absolute inset-0 -z-10 h-full w-full object-cover" />
+      <img src={center.hero_image_url} alt="" width="1600" height="900" fetchpriority="high" decoding="async" class="absolute inset-0 -z-10 h-full w-full object-cover" />
     )}
     <div class="absolute inset-0 -z-10 bg-linear-to-t from-black/70 via-black/35 to-black/10"></div>
 
     <div class="mx-auto w-full max-w-6xl px-6 pb-10 pt-24 sm:px-10 sm:pb-14">
       {center.logo_url && (
-        <img src={center.logo_url} alt={center.name} class="mb-6 h-14 w-auto max-w-[70%] rounded-lg bg-white/95 p-2 object-contain sm:h-16" />
+        <img src={center.logo_url} alt={center.name} width="160" height="64" fetchpriority="high" decoding="async" class="mb-6 h-14 w-auto max-w-[70%] rounded-lg bg-white/95 p-2 object-contain sm:h-16" />
       )}
       <h1 class="max-w-3xl text-4xl font-bold tracking-tight text-white sm:text-5xl">
         {center.hero_title || center.name}

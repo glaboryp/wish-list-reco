@@ -42,7 +42,7 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
         {images.length > 0 ? (
           <>
             <div class="aspect-4/3 overflow-hidden rounded-xl bg-surface shadow-card">
-              <img src={images[0].image_url} alt={images[0].alt_text || item.name} class="h-full w-full object-cover" id="main-image" />
+              <img src={images[0].image_url} alt={images[0].alt_text || item.name} width="1600" height="1200" fetchpriority="high" decoding="async" class="h-full w-full object-cover" id="main-image" />
             </div>
             {images.length > 1 && (
               <ul class="grid grid-cols-4 gap-3">
@@ -56,7 +56,7 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
                       data-src={img.image_url}
                       data-alt={img.alt_text || `${item.name}, imagen ${idx + 1}`}
                     >
-                      <img src={img.image_url} alt="" class="h-full w-full object-cover" />
+                      <img src={img.image_url} alt="" width="200" height="200" loading="lazy" decoding="async" class="h-full w-full object-cover" />
                     </button>
                   </li>
                 ))}
