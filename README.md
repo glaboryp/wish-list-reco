@@ -71,7 +71,7 @@ pnpm test:unit                                  # Vitest
 pnpm test:e2e                                   # Playwright (base de datos simulada)
 
 TEST_DATABASE_URL=$POSTGRES_URL TEST_NEON_FETCH_ENDPOINT=$NEON_FETCH_ENDPOINT \
-  pnpm exec vitest run src/tests/integration    # contra la base local de arriba
+  pnpm exec vitest run src/tests/integration --testTimeout=30000  # contra la base local de arriba
 ```
 
 CI ejecuta el job `Integration` en cada PR con el mismo Postgres y proxy como servicios, aplica las migraciones y lanza los tests de integración.
