@@ -2,7 +2,7 @@ import { SignJWT } from 'jose';
 import { expect, test, type BrowserContext } from '@playwright/test';
 
 const secret = new TextEncoder().encode('e2e-session-secret-e2e-session-secret');
-const ORIGIN = 'http://localhost:4321';
+const ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 4321}`;
 
 const mint = (email: string) =>
     new SignJWT({ email })

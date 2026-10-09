@@ -37,6 +37,15 @@ const item = {
   alt_text: null,
 };
 
+const itemImages = ['/favicon.webp', '/oratorio.webp'].map((image_url, sort_order) => ({
+  id: `44444444-4444-4444-8444-44444444444${sort_order}`,
+  item_id: ITEM_ID,
+  image_url,
+  alt_text: null,
+  sort_order,
+  created_at: '2026-01-01T00:00:00Z',
+}));
+
 export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
   const has = (value: string) => values.includes(value);
@@ -73,6 +82,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
         ]
       : [];
   }
+  if (text.includes('FROM item_images WHERE item_id')) {
+    return has(ITEM_ID) ? itemImages : [];
+  }
   if (text.includes('item_images img JOIN items')) {
     return has(RECOLETOS_ID)
       ? ['/favicon.webp', '/oratorio.webp'].map((image_url, sort_order) => ({
@@ -84,6 +96,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
           created_at: '2026-01-01T00:00:00Z',
         }))
       : [];
+  }
+  if (text.includes('WHERE i.id =') && !has(ITEM_ID)) {
+    return [];
   }
   if (text.includes('FROM items')) {
     return has(RECOLETOS_ID) ? [item] : [];

@@ -5,6 +5,7 @@ import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelCl
 import { parseEmail, parseFees, parsePaypal } from "../../../lib/admin/forms";
 import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
+import { centerNotFoundPage } from "../../../lib/error-pages";
 import { getCenterBySlug, setCenterStatus, updateFeeSettings } from "../../../lib/repo/centers";
 import { addCenterUser } from "../../../lib/repo/users";
 
@@ -13,7 +14,7 @@ if (guard instanceof Response) return guard;
 const { actor } = guard;
 
 const center = await getCenterBySlug(Astro.params.slug ?? '');
-if (!center) return new Response('Centro no encontrado', { status: 404 });
+if (!center) return centerNotFoundPage();
 
 const here = `/admin/centers/${center.slug}`;
 const percent = (rate: number) => String(Math.round(rate * 10000) / 100).replace('.', ',');

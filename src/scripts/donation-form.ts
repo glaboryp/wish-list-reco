@@ -225,6 +225,7 @@ export function initDonationForm(options: DonationFormOptions): void {
             }
             form!.classList.add('hidden');
             thanks.classList.remove('hidden');
+            document.dispatchEvent(new CustomEvent('donation:completed'));
             thanks.querySelector('[data-reload]')?.addEventListener('click', () => window.location.reload());
             thanks.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };

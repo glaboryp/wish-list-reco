@@ -6,4 +6,5 @@ import vercel from '@astrojs/vercel';
 export default defineConfig({
   output: 'server',
   adapter: vercel({}),
+  devToolbar: { enabled: process.env.MOCK_DB !== 'true' },
 });
