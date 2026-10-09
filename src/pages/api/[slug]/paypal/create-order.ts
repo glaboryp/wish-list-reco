@@ -4,9 +4,8 @@ import { isUuid } from '../../../../lib/ids';
 import { createOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { getPublicItem } from '../../../../lib/repo/items';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+import { json } from '../../../../lib/http';
+import { fromCents, remainingCents } from '../../../../lib/money';
 
 export const POST: APIRoute = async ({ params, request }) => {
   try {
@@ -43,7 +42,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       return json({ error: 'Este artículo ya ha sido financiado' }, 400);
     }
 
-    const remaining = Math.ceil(item.goal - item.raised);
+    const remaining = Math.ceil(fromCents(remainingCents(item.goal, item.raised)));
     if (donationAmount > remaining) {
       return json({ error: `La cantidad supera lo necesario para financiar el artículo (${remaining}€)` }, 400);
     }

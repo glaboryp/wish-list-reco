@@ -11,7 +11,7 @@ const CSP = [
     "frame-src https://www.paypal.com https://www.sandbox.paypal.com https://*.firebaseapp.com https://accounts.google.com",
 ].join('; ') + ';';
 
-export const onRequest = defineMiddleware(async (context: any, next: any) => {
+export const onRequest = defineMiddleware(async (context, next) => {
     if (context.request.method === 'GET' || context.request.method === 'HEAD') {
         const legacyTarget = legacyRedirectTarget(new URL(context.request.url));
         if (legacyTarget) {

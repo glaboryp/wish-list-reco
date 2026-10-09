@@ -144,7 +144,7 @@ const positions = positionOptions(allItems, item.id);
                   <button type="submit" class={`${secondaryButtonClass} px-4!`}>Poner de portada</button>
                 </form>
               )}
-              <form method="post" onsubmit="return confirm('¿Quitar esta imagen del artículo?')">
+              <form method="post" data-confirm="¿Quitar esta imagen del artículo?">
                 <input type="hidden" name="intent" value="remove_image" />
                 <input type="hidden" name="image_id" value={image.id} />
                 <button type="submit" class={`${dangerButtonClass} px-4!`}>Quitar</button>
@@ -166,7 +166,7 @@ const positions = positionOptions(allItems, item.id);
   <form
     method="post"
     class={`${cardClass} flex flex-wrap items-center justify-between gap-4`}
-    onsubmit={`return confirm('${item.blockingDonationCount > 0 ? '¿Archivar este artículo? Dejará de verse en tu web.' : '¿Borrar este artículo para siempre?'}')`}
+    data-confirm={item.blockingDonationCount > 0 ? '¿Archivar este artículo? Dejará de verse en tu web.' : '¿Borrar este artículo para siempre?'}
   >
     <input type="hidden" name="intent" value="remove" />
     <div class="max-w-xl">

@@ -147,6 +147,11 @@ const nav = center
         setTimeout(() => flash.remove(), 8000);
       });
       document.querySelector('nav [aria-current="page"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+      document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          if (!confirm(form.dataset.confirm ?? '')) event.preventDefault();
+        });
+      });
       document.getElementById('center-switch')?.addEventListener('change', (event) => {
         window.location.assign((event.target as HTMLSelectElement).value);
       });

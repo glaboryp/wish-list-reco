@@ -2,6 +2,7 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, secondaryButtonClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { formatDateTime, formatEuro } from "../../../lib/format";
+import { fromCents, remainingCents } from "../../../lib/money";
 import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { isUuid } from "../../../lib/ids";
@@ -67,7 +68,7 @@ const pageHref = (target: number) => {
 };
 const payable = items
   .filter((item) => item.status !== 'archived')
-  .map((item) => ({ item, remaining: Math.round((item.goal - item.raised) * 100) / 100 }))
+  .map((item) => ({ item, remaining: fromCents(remainingCents(item.goal, item.raised)) }))
   .filter(({ remaining }) => remaining > 0);
 ---
 
@@ -181,7 +182,7 @@ const payable = items
                 {donation.source === 'paypal' && !donation.voided_at && actor.isSuperadmin && (
                   <details class="text-left">
                     <summary class="inline-flex min-h-11 cursor-pointer items-center font-semibold text-red-800 underline-offset-4 hover:underline">Anular por reembolso</summary>
-                    <form method="post" class="mt-2 space-y-2" onsubmit="return confirm('¿Anular esta donación de PayPal? Dejará de sumar en el total del artículo. Haz antes el reembolso en PayPal.')">
+                    <form method="post" class="mt-2 space-y-2" data-confirm="¿Anular esta donación de PayPal? Dejará de sumar en el total del artículo. Haz antes el reembolso en PayPal.">
                       <input type="hidden" name="intent" value="void_paypal" />
                       <input type="hidden" name="donation_id" value={donation.id} />
                       <label class="sr-only" for={`reason-${donation.id}`}>Motivo de la anulación</label>
@@ -191,7 +192,7 @@ const payable = items
                   </details>
                 )}
                 {donation.source === 'manual' && !donation.voided_at && (
-                  <form method="post" onsubmit="return confirm('¿Anular esta donación? Dejará de sumar en el total del artículo.')">
+                  <form method="post" data-confirm="¿Anular esta donación? Dejará de sumar en el total del artículo.">
                     <input type="hidden" name="intent" value="void" />
                     <input type="hidden" name="donation_id" value={donation.id} />
                     <button type="submit" class={`${dangerButtonClass} px-4!`}>Anular donación</button>
