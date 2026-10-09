@@ -1,6 +1,7 @@
 ---
 import CenterPage from "../../../layouts/CenterPage.astro";
 import DonationForm from "../../../components/DonationForm.astro";
+import { itemNotFoundPage, centerNotFoundPage } from "../../../lib/error-pages";
 import { isUuid } from "../../../lib/ids";
 import { getCenterBySlug } from "../../../lib/repo/centers";
 import Icon from "../../../components/Icon.astro";
@@ -11,15 +12,11 @@ const { slug, id } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;
 
 if (!center || center.status !== 'active') {
-  return new Response('Centro no encontrado', { status: 404 });
+  return centerNotFoundPage();
 }
-if (!isUuid(id)) {
-  return Astro.redirect(`/${center.slug}`);
-}
-
-const item = await getPublicItem(center.id, id);
+const item = isUuid(id) ? await getPublicItem(center.id, id) : null;
 if (!item) {
-  return Astro.redirect(`/${center.slug}`);
+  return itemNotFoundPage(center);
 }
 
 const images = await getItemImages(item.id);
@@ -28,22 +25,31 @@ const isFunded = item.status === 'funded';
 const remaining = Math.max(0, item.goal - item.raised);
 const maxDonation = Math.ceil(remaining);
 const paypalClientId = center.paypal_client_id;
+const canDonate = !isFunded && center.paypal_configured && !!paypalClientId;
+const galleryImages = images.map((img, idx) => ({ src: img.image_url, alt: img.alt_text || (idx === 0 ? item.name : `${item.name}, imagen ${idx + 1}`) }));
 ---
 
 <CenterPage title={`${item.name} - ${center.name}`} primaryColor={center.primary_color}>
-  <main class="mx-auto max-w-6xl px-4 py-8 sm:py-10">
+  <main class:list={["mx-auto max-w-6xl px-4 py-8 sm:py-10", canDonate && "pb-28 md:pb-10"]}>
     <a href={`/${center.slug}#wishlist`} class="mb-6 inline-flex min-h-11 items-center gap-2 font-semibold text-ink hover:underline">
       <Icon name="arrow-left" class="h-4 w-4" />
       Volver a la lista
     </a>
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-12">
-      <div class="space-y-4">
+      <div class="space-y-4" data-gallery data-images={JSON.stringify(galleryImages)}>
         {images.length > 0 ? (
           <>
-            <div class="aspect-4/3 overflow-hidden rounded-xl bg-surface shadow-card">
-              <img src={images[0].image_url} alt={images[0].alt_text || item.name} class="h-full w-full object-cover" id="main-image" />
-            </div>
+            <button
+              type="button"
+              data-gallery-open
+              aria-label="Ampliar imagen"
+              aria-haspopup="dialog"
+              class="block aspect-4/3 w-full cursor-zoom-in overflow-hidden rounded-xl bg-surface shadow-card"
+              style="touch-action: pan-y;"
+            >
+              <img src={images[0].image_url} alt={images[0].alt_text || item.name} class="pointer-events-none h-full w-full select-none object-cover" draggable="false" data-gallery-image />
+            </button>
             {images.length > 1 && (
               <ul class="grid grid-cols-4 gap-3">
                 {images.map((img, idx) => (
@@ -53,8 +59,7 @@ const paypalClientId = center.paypal_client_id;
                       class="aspect-square w-full overflow-hidden rounded-lg border-2 border-transparent bg-surface transition-colors hover:border-line-strong aria-pressed:border-(color:--primary)"
                       aria-pressed={idx === 0 ? 'true' : 'false'}
                       aria-label={`Ver imagen ${idx + 1} de ${images.length}`}
-                      data-src={img.image_url}
-                      data-alt={img.alt_text || `${item.name}, imagen ${idx + 1}`}
+                      data-gallery-thumb
                     >
                       <img src={img.image_url} alt="" class="h-full w-full object-cover" />
                     </button>
@@ -90,8 +95,8 @@ const paypalClientId = center.paypal_client_id;
             <h2 class="text-xl font-bold text-green-900">Objetivo cumplido</h2>
             <p class="mt-1 text-base text-green-900">Gracias a todos los que han contribuido para hacerlo posible.</p>
           </div>
-        ) : center.paypal_configured && paypalClientId ? (
-          <div class="space-y-4 rounded-xl border border-line bg-white p-5 shadow-card sm:p-6">
+        ) : canDonate ? (
+          <div id="donar" class="scroll-mt-4 space-y-4 rounded-xl border border-line bg-white p-5 shadow-card sm:p-6">
             <h2 class="text-xl font-bold text-ink">Contribuir a este artículo</h2>
             <DonationForm itemId={item.id} itemName={item.name} slug={center.slug} centerName={center.name} feeSchedule={center.fees} maxDonation={maxDonation} paypalClientId={paypalClientId} />
           </div>
@@ -104,17 +109,28 @@ const paypalClientId = center.paypal_client_id;
     </div>
   </main>
 
+  {canDonate && (
+    <div
+      id="donate-bar"
+      class="fixed inset-x-0 bottom-0 z-40 hidden border-t border-line bg-white px-4 pt-3 shadow-lift md:hidden"
+      style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+      aria-hidden="true"
+    >
+      <button type="button" class="flex min-h-12 w-full items-center justify-center rounded-lg px-6 text-lg font-semibold text-white" style="background-color: var(--primary);">
+        Donar
+      </button>
+    </div>
+  )}
+
   <script>
-    const main = document.getElementById('main-image') as HTMLImageElement | null;
-    const thumbs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-src]'));
-    thumbs.forEach((button) => {
-      button.addEventListener('click', () => {
-        if (main && button.dataset.src) {
-          main.src = button.dataset.src;
-          main.alt = button.dataset.alt ?? '';
-        }
-        thumbs.forEach((other) => other.setAttribute('aria-pressed', other === button ? 'true' : 'false'));
-      });
-    });
+    import { initGallery } from "../../../scripts/gallery";
+    import { initDonateBar } from "../../../scripts/donate-bar";
+
+    const gallery = document.querySelector<HTMLElement>("[data-gallery]");
+    if (gallery) initGallery(gallery);
+
+    const bar = document.getElementById("donate-bar");
+    const target = document.getElementById("donar");
+    if (bar && target) initDonateBar(bar, target);
   </script>
 </CenterPage>

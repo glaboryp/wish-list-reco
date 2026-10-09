@@ -50,7 +50,22 @@ test('Legacy item URLs redirect to the Recoletos center', async ({ request }) =>
     expect(response.headers()['location']).toBe('/recoletos/item/33333333-3333-4333-8333-333333333333');
 });
 
-test('A non-uuid item id does not crash the page', async ({ request }) => {
+test('A non-uuid item id shows the not-found page', async ({ request }) => {
     const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
-    expect(response.status()).toBe(302);
+    expect(response.status()).toBe(404);
+});
+
+test('An unknown item shows a message with a link back to the center', async ({ page }) => {
+    const response = await page.goto('/recoletos/item/99999999-9999-4999-8999-999999999999');
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { name: 'No encontramos este artículo' })).toBeVisible();
+    await page.getByRole('link', { name: /Ver la lista de Recoletos/ }).click();
+    await expect(page).toHaveURL(/\/recoletos#wishlist$/);
+});
+
+test('An unknown center shows a styled message with a link to the centers', async ({ page }) => {
+    const response = await page.goto('/no-existe');
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { name: 'No encontramos este centro' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ver los centros' })).toHaveAttribute('href', '/');
 });
