@@ -27,10 +27,10 @@ const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
 const isFunded = item.status === 'funded';
 const remaining = Math.max(0, item.goal - item.raised);
 const maxDonation = Math.ceil(remaining);
-const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_client_id : null;
+const paypalClientId = center.paypal_client_id;
 ---
 
-<CenterPage title={`${item.name} - ${center.name}`} primaryColor={center.primary_color} paypalClientId={paypalClientId}>
+<CenterPage title={`${item.name} - ${center.name}`} primaryColor={center.primary_color}>
   <main class="mx-auto max-w-6xl px-4 py-8 sm:py-10">
     <a href={`/${center.slug}#wishlist`} class="mb-6 inline-flex min-h-11 items-center gap-2 font-semibold text-ink hover:underline">
       <Icon name="arrow-left" class="h-4 w-4" />
@@ -90,10 +90,10 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
             <h2 class="text-xl font-bold text-green-900">Objetivo cumplido</h2>
             <p class="mt-1 text-base text-green-900">Gracias a todos los que han contribuido para hacerlo posible.</p>
           </div>
-        ) : center.paypal_configured ? (
+        ) : center.paypal_configured && paypalClientId ? (
           <div class="space-y-4 rounded-xl border border-line bg-white p-5 shadow-card sm:p-6">
             <h2 class="text-xl font-bold text-ink">Contribuir a este artículo</h2>
-            <DonationForm itemId={item.id} itemName={item.name} slug={center.slug} centerName={center.name} feeSchedule={center.fees} maxDonation={maxDonation} isDetailPage={true} />
+            <DonationForm itemId={item.id} itemName={item.name} slug={center.slug} centerName={center.name} feeSchedule={center.fees} maxDonation={maxDonation} paypalClientId={paypalClientId} />
           </div>
         ) : (
           <div class="rounded-xl bg-surface p-6 text-base text-muted">
