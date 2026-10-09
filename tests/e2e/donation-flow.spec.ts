@@ -54,3 +54,27 @@ test('A non-uuid item id does not crash the page', async ({ request }) => {
     const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
     expect(response.status()).toBe(302);
 });
+
+test('Item page exposes share metadata', async ({ page, request }) => {
+    await page.goto('/recoletos');
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+    await expect(page).toHaveURL(/\/recoletos\/item\//);
+
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Cáliz - Recoletos/);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', /25,00 € de 100,00 €/);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^http:\/\/localhost:\d+\/.+\.webp$/);
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/recoletos\/item\//);
+    await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /initial-scale=1/);
+
+    await page.getByRole('button', { name: 'Compartir', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', /^https:\/\/wa\.me\/\?text=/);
+    await expect(page.getByRole('button', { name: 'Copiar enlace' })).toBeVisible();
+
+    const robots = await request.get('/robots.txt');
+    expect(await robots.text()).toContain('Sitemap:');
+    const sitemap = await request.get('/sitemap.xml');
+    const xml = await sitemap.text();
+    expect(xml).toContain('/recoletos</loc>');
+    expect(xml).toContain('/recoletos/item/');
+});

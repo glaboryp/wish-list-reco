@@ -6,6 +6,8 @@ import { getCenterBySlug } from "../../../lib/repo/centers";
 import Icon from "../../../components/Icon.astro";
 import { formatEuro } from "../../../lib/format";
 import { getItemImages, getPublicItem } from "../../../lib/repo/items";
+import { buildItemMeta } from "../../../lib/seo";
+import ShareButton from "../../../components/ShareButton.astro";
 
 const { slug, id } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;
@@ -28,9 +30,16 @@ const isFunded = item.status === 'funded';
 const remaining = Math.max(0, item.goal - item.raised);
 const maxDonation = Math.ceil(remaining);
 const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_client_id : null;
+const meta = buildItemMeta({
+  item,
+  centerName: center.name,
+  path: Astro.url.pathname,
+  image: images[0]?.image_url ?? item.imageUrl ?? center.hero_image_url ?? center.logo_url,
+  origin: Astro.url.origin,
+});
 ---
 
-<CenterPage title={`${item.name} - ${center.name}`} primaryColor={center.primary_color} paypalClientId={paypalClientId}>
+<CenterPage title={meta.title} description={meta.description} image={meta.image} canonical={meta.canonical} primaryColor={center.primary_color} paypalClientId={paypalClientId}>
   <main class="mx-auto max-w-6xl px-4 py-8 sm:py-10">
     <a href={`/${center.slug}#wishlist`} class="mb-6 inline-flex min-h-11 items-center gap-2 font-semibold text-ink hover:underline">
       <Icon name="arrow-left" class="h-4 w-4" />
@@ -84,6 +93,8 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
           </p>
           {!isFunded && <p class="tabular text-base text-muted">Faltan {formatEuro(remaining)} para completarlo.</p>}
         </div>
+
+        <ShareButton url={meta.canonical} text={`${item.name} - ${center.name}`} />
 
         {isFunded ? (
           <div class="rounded-xl bg-green-50 p-6 ring-1 ring-green-200">
