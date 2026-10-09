@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SignJWT } from 'jose';
 import { signSession, verifySession } from '../../lib/auth/session';
 
 const secret = 'a'.repeat(40);
@@ -6,7 +7,29 @@ const payload = { email: 'ana@example.org', uid: 'uid-1' };
 
 describe('session cookie', () => {
   it('round-trips the payload', async () => {
-    expect(await verifySession(await signSession(payload, secret), secret)).toEqual(payload);
+    expect(await verifySession(await signSession(payload, secret), secret)).toEqual({ ...payload, sv: 0 });
+  });
+
+  it('embeds the session version claim', async () => {
+    expect(await verifySession(await signSession({ ...payload, sv: 3 }, secret), secret)).toMatchObject({ sv: 3 });
+  });
+
+  it('treats a token without the sv claim as version 0', async () => {
+    const legacy = await new SignJWT({ email: payload.email })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(payload.uid)
+      .setExpirationTime('1h')
+      .sign(new TextEncoder().encode(secret));
+    expect(await verifySession(legacy, secret)).toEqual({ ...payload, sv: 0 });
+  });
+
+  it('ignores a malformed sv claim', async () => {
+    const odd = await new SignJWT({ email: payload.email, sv: 'x' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(payload.uid)
+      .setExpirationTime('1h')
+      .sign(new TextEncoder().encode(secret));
+    expect((await verifySession(odd, secret))?.sv).toBe(0);
   });
 
   it('rejects a token signed with another secret', async () => {

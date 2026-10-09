@@ -4,6 +4,7 @@ import { buttonClass, cardClass, secondaryButtonClass, chipClass, dangerButtonCl
 import { formatDateTime, formatEuro } from "../../../lib/format";
 import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
+import { recordAudit } from "../../../lib/repo/audit";
 import { isUuid } from "../../../lib/ids";
 import { addManualDonation, DONATIONS_PAGE_SIZE, listDonations, voidManualDonation, voidPaypalDonation } from "../../../lib/repo/donations";
 import { listAdminItems } from "../../../lib/repo/items";
@@ -12,6 +13,8 @@ const guard = await guardCenter(Astro);
 if (guard instanceof Response) return guard;
 const { actor, center } = guard;
 const here = `/${center.slug}/admin/donations`;
+const audit = (action: string, summary: string, entityId?: string) =>
+  recordAudit({ centerId: center.id, actorEmail: actor.email, action, entityType: 'donation', entityId, summary });
 const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
 
 if (Astro.request.method === 'POST') {
@@ -23,6 +26,7 @@ if (Astro.request.method === 'POST') {
     if (!parsed.ok) return fail(parsed.error);
     const outcome = await voidPaypalDonation(center.id, parsed.value.donationId, { reason: parsed.value.reason, actorEmail: actor.email });
     if (outcome === 'missing') return fail('No se pudo anular la donación');
+    if (outcome === 'voided') await audit('donation.void_paypal', `Donación de PayPal anulada: ${parsed.value.reason}`, parsed.value.donationId);
     return Astro.redirect(`${here}?ok=${outcome === 'voided' ? 'donation-voided' : 'donation-already-voided'}`, 303);
   }
 
@@ -31,6 +35,7 @@ if (Astro.request.method === 'POST') {
     if (!isUuid(donationId) || !(await voidManualDonation(center.id, donationId))) {
       return fail('No se pudo anular la donación');
     }
+    await audit('donation.void', 'Donación manual anulada', donationId);
     return Astro.redirect(`${here}?ok=donation-voided`, 303);
   }
 
@@ -43,6 +48,7 @@ if (Astro.request.method === 'POST') {
       ? `Solo faltan ${formatEuro(created.remaining)} para completar este artículo. Apunta como máximo esa cantidad`
       : 'Este artículo ya tiene todo el dinero reunido, no se puede apuntar más');
   }
+  await audit('donation.add', `Donación manual añadida: ${formatEuro(parsed.value.amount)}`, parsed.value.itemId);
   return Astro.redirect(`${here}?ok=donation-added`, 303);
 }
 

@@ -1,4 +1,5 @@
 import { getCenterBySlug } from '../repo/centers';
+import { getSessionVersion } from '../repo/sessions';
 import { findMembership } from '../repo/users';
 import type { Center } from '../../types/database';
 import { SESSION_COOKIE, verifySession } from './session';
@@ -29,6 +30,7 @@ export async function getActor(cookies: CookieReader): Promise<Actor | null> {
   if (!token) return null;
   const session = await verifySession(token, import.meta.env.SESSION_SECRET);
   if (!session) return null;
+  if (session.sv < (await getSessionVersion(session.email))) return null;
   return { email: session.email, uid: session.uid, isSuperadmin: isSuperadminEmail(session.email) };
 }
 

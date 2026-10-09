@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { isSuperadminEmail } from '../../../lib/auth/access';
 import { verifyFirebaseIdToken } from '../../../lib/auth/firebase';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from '../../../lib/auth/session';
+import { getSessionVersion } from '../../../lib/repo/sessions';
 import { linkFirebaseUid, listMembershipsByEmail } from '../../../lib/repo/users';
 
 const json = (body: unknown, status = 200) =>
@@ -33,7 +34,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   await linkFirebaseUid(identity.email, identity.uid);
 
-  const token = await signSession({ email: identity.email, uid: identity.uid }, import.meta.env.SESSION_SECRET);
+  const token = await signSession(
+    { email: identity.email, uid: identity.uid, sv: await getSessionVersion(identity.email) },
+    import.meta.env.SESSION_SECRET,
+  );
   cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: import.meta.env.PROD,

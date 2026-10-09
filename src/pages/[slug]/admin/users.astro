@@ -2,6 +2,7 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { parseEmail } from "../../../lib/admin/forms";
+import { recordAudit } from "../../../lib/repo/audit";
 import { guardCenter } from "../../../lib/auth/guard";
 import { addCenterUser, listCenterUsers, removeCenterUser } from "../../../lib/repo/users";
 
@@ -20,13 +21,16 @@ if (Astro.request.method === 'POST') {
     const outcome = await removeCenterUser(center.id, parsed.value, { force: actor.isSuperadmin });
     if (outcome === 'last') return fail('No se puede quitar a la última encargada del centro');
     if (outcome === 'missing') return fail('Ese correo no es encargada de este centro');
+    await recordAudit({ centerId: center.id, actorEmail: actor.email, action: 'user.remove', entityType: 'user', entityId: parsed.value, summary: `Acceso quitado a ${parsed.value}` });
     if (!actor.isSuperadmin && parsed.value === actor.email.toLowerCase()) {
       return Astro.redirect(`/?left=${encodeURIComponent(center.slug)}`, 303);
     }
     return Astro.redirect(`${here}?ok=user-removed`, 303);
   }
 
-  await addCenterUser(center.id, parsed.value);
+  if (await addCenterUser(center.id, parsed.value)) {
+    await recordAudit({ centerId: center.id, actorEmail: actor.email, action: 'user.add', entityType: 'user', entityId: parsed.value, summary: `Encargada añadida: ${parsed.value}` });
+  }
   return Astro.redirect(`${here}?ok=user-added`, 303);
 }
 

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getCenterBySlug, findMembership } = vi.hoisted(() => ({
+const { getCenterBySlug, findMembership, getSessionVersion } = vi.hoisted(() => ({
+  getSessionVersion: vi.fn(),
   getCenterBySlug: vi.fn(),
   findMembership: vi.fn(),
 }));
 
 vi.mock('../../lib/repo/centers', () => ({ getCenterBySlug }));
+vi.mock('../../lib/repo/sessions', () => ({ getSessionVersion }));
 vi.mock('../../lib/repo/users', () => ({ findMembership }));
 
 import { authorizeCenter, authorizeSuperadmin, getActor, isSuperadminEmail } from '../../lib/auth/access';
@@ -20,6 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getCenterBySlug.mockResolvedValue(center);
   findMembership.mockResolvedValue(true);
+  getSessionVersion.mockResolvedValue(0);
 });
 
 describe('isSuperadminEmail', () => {
@@ -41,6 +44,22 @@ describe('getActor', () => {
   it('builds the actor from a valid cookie', async () => {
     const token = await signSession({ email: 'ana@example.org', uid: 'u1' }, secret);
     expect(await getActor(cookies(token))).toEqual(manager);
+  });
+
+  it('rejects a cookie older than the current session version', async () => {
+    getSessionVersion.mockResolvedValue(2);
+    const stale = await signSession({ email: 'ana@example.org', uid: 'u1', sv: 1 }, secret);
+    const legacy = await signSession({ email: 'ana@example.org', uid: 'u1' }, secret);
+    const fresh = await signSession({ email: 'ana@example.org', uid: 'u1', sv: 2 }, secret);
+    expect(await getActor(cookies(stale))).toBeNull();
+    expect(await getActor(cookies(legacy))).toBeNull();
+    expect(await getActor(cookies(fresh))).toEqual(manager);
+  });
+
+  it('keeps tokens without the claim valid until the version is bumped', async () => {
+    const legacy = await signSession({ email: 'ana@example.org', uid: 'u1' }, secret);
+    expect(await getActor(cookies(legacy))).toEqual(manager);
+    expect(getSessionVersion).toHaveBeenCalledWith('ana@example.org');
   });
 
   it('flags the superadmin', async () => {

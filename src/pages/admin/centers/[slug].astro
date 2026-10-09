@@ -5,6 +5,7 @@ import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelCl
 import { parseEmail, parseFees, parsePaypal } from "../../../lib/admin/forms";
 import { requiresNewSecret, savePaypalSettings } from "../../../lib/admin/paypal-settings";
 import { guardSuperadmin } from "../../../lib/auth/guard";
+import { recordAudit } from "../../../lib/repo/audit";
 import { getCenterBySlug, setCenterStatus, updateFeeSettings } from "../../../lib/repo/centers";
 import { addCenterUser } from "../../../lib/repo/users";
 
@@ -17,6 +18,8 @@ if (!center) return new Response('Centro no encontrado', { status: 404 });
 
 const here = `/admin/centers/${center.slug}`;
 const percent = (rate: number) => String(Math.round(rate * 10000) / 100).replace('.', ',');
+const audit = (action: string, entityType: string, summary: string, entityId?: string) =>
+  recordAudit({ centerId: center.id, actorEmail: actor.email, action, entityType, entityId, summary });
 const fail = (message: string) => Astro.redirect(`${here}?error=${encodeURIComponent(message)}`, 303);
 
 if (Astro.request.method === 'POST') {
@@ -37,18 +40,21 @@ if (Astro.request.method === 'POST') {
       console.error('PayPal settings save failed:', err instanceof Error ? err.message : 'unknown error');
       return fail('No se pudo guardar el secret; revisa la configuración de cifrado');
     }
+    await audit('paypal.update', 'paypal', parsed.value.secret === null ? 'Credenciales de PayPal actualizadas (sin cambiar el secret)' : 'Credenciales de PayPal actualizadas (nuevo secret)');
   } else if (intent === 'fees') {
     const parsed = parseFees(form);
     if (!parsed.ok) return fail(parsed.error);
     await updateFeeSettings(center.id, parsed.value);
+    await audit('fees.update', 'center', 'Comisiones actualizadas', center.id);
   } else if (intent === 'status') {
     const status = form.get('status');
     if (status !== 'active' && status !== 'disabled') return fail('Estado no válido');
     await setCenterStatus(center.id, status);
+    await audit('center.status', 'center', status === 'active' ? 'Centro activado' : 'Centro desactivado', center.id);
   } else if (intent === 'add_user') {
     const parsed = parseEmail(form.get('email'));
     if (!parsed.ok) return fail(parsed.error);
-    await addCenterUser(center.id, parsed.value);
+    if (await addCenterUser(center.id, parsed.value)) await audit('user.add', 'user', `Encargada añadida: ${parsed.value}`, parsed.value);
   } else {
     return fail('Acción no válida');
   }

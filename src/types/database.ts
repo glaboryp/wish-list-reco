@@ -131,3 +131,14 @@ export interface CenterUserRow {
   firebase_uid: string | null;
   created_at: string;
 }
+
+export interface AuditEntry {
+  id: string;
+  center_id: string | null;
+  actor_email: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  summary: string;
+  created_at: string;
+}

@@ -6,6 +6,7 @@ export const SESSION_TTL_SECONDS = 5 * 24 * 60 * 60;
 export interface SessionPayload {
   email: string;
   uid: string;
+  sv: number;
 }
 
 function signingKey(secret: string): Uint8Array {
@@ -16,11 +17,11 @@ function signingKey(secret: string): Uint8Array {
 }
 
 export async function signSession(
-  payload: SessionPayload,
+  payload: Omit<SessionPayload, 'sv'> & { sv?: number },
   secret: string,
   ttlSeconds: number = SESSION_TTL_SECONDS,
 ): Promise<string> {
-  return new SignJWT({ email: payload.email })
+  return new SignJWT({ email: payload.email, sv: payload.sv ?? 0 })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.uid)
     .setIssuedAt()
@@ -32,7 +33,8 @@ export async function verifySession(token: string, secret: string): Promise<Sess
   try {
     const { payload } = await jwtVerify(token, signingKey(secret), { algorithms: ['HS256'] });
     if (typeof payload.email !== 'string' || !payload.sub) return null;
-    return { email: payload.email, uid: payload.sub };
+    const sv = typeof payload.sv === 'number' && Number.isInteger(payload.sv) && payload.sv >= 0 ? payload.sv : 0;
+    return { email: payload.email, uid: payload.sub, sv };
   } catch {
     return null;
   }
