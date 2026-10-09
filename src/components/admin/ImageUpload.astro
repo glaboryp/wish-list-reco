@@ -92,6 +92,16 @@ const inputId = `upload-${name}`;
       show('Subiendo imagen...', 'info');
       submitButtons().forEach((button) => (button.disabled = true));
 
+      const nativeFetch = window.fetch;
+      let limitedMessage = '';
+      window.fetch = async (...args) => {
+        const response = await nativeFetch(...args);
+        if (response.status === 429) {
+          limitedMessage = (await response.clone().json().catch(() => null))?.error ?? 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
+        }
+        return response;
+      };
+
       try {
         const safeName = selected.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const blob = await upload(`${slug}/${crypto.randomUUID()}-${safeName}`, selected, {
@@ -105,8 +115,9 @@ const inputId = `upload-${name}`;
         show('Imagen lista. Pulsa el botón de guardar para aplicarla.', 'ok');
       } catch {
         hidden.value = '';
-        show('No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
+        show(limitedMessage || 'No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
+        window.fetch = nativeFetch;
         syncSubmit();
       }
     });
