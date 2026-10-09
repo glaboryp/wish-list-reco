@@ -7,6 +7,7 @@ import { formatEuro } from "../../../../lib/format";
 import { MAX_ITEM_IMAGES, addItemImage, listAdminItems, listItemImages, removeItemImage, setCoverImage } from "../../../../lib/repo/items";
 import { positionOptions } from "../../../../lib/admin/positions";
 import { parseImageUrl, parseItem } from "../../../../lib/admin/forms";
+import { recordAudit } from "../../../../lib/repo/audit";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { isUuid } from "../../../../lib/ids";
 import { getAdminItem, removeOrArchiveItem, updateItem } from "../../../../lib/repo/items";
@@ -15,6 +16,8 @@ const guard = await guardCenter(Astro);
 if (guard instanceof Response) return guard;
 const { actor, center } = guard;
 const listUrl = `/${center.slug}/admin/items`;
+const audit = (action: string, summary: string, entityId?: string) =>
+  recordAudit({ centerId: center.id, actorEmail: actor.email, action, entityType: 'item', entityId: entityId ?? id, summary });
 
 const { id } = Astro.params;
 if (!isUuid(id)) return new Response('Artículo no encontrado', { status: 404 });
@@ -28,6 +31,7 @@ if (Astro.request.method === 'POST') {
 
   if (form.get('intent') === 'remove') {
     const outcome = await removeOrArchiveItem(center.id, item.id);
+    if (outcome !== 'missing') await audit(outcome === 'deleted' ? 'item.delete' : 'item.archive', `${outcome === 'deleted' ? 'Artículo borrado' : 'Artículo archivado'}: ${item.name}`);
     const message = outcome === 'archived' ? 'El artículo tiene donaciones que impiden borrarlo, se ha archivado' : '';
     return Astro.redirect(message ? `${listUrl}?error=${encodeURIComponent(message)}` : `${listUrl}?ok=item-removed`, 303);
   }
@@ -40,20 +44,24 @@ if (Astro.request.method === 'POST') {
     if (!image.ok) return imageFailure(image.error);
     const outcome = await addItemImage(center.id, item.id, image.value);
     if (outcome === 'full') return imageFailure(`Ya hay ${MAX_ITEM_IMAGES} imágenes. Quita alguna para poder añadir otra`);
+    await audit('item.image_add', `Imagen añadida a ${item.name}`);
     return Astro.redirect(`${here}?ok=image-added`, 303);
   }
   if (form.get('intent') === 'remove_image') {
     if (!isUuid(imageId) || !(await removeItemImage(center.id, item.id, imageId))) return imageFailure('No se pudo quitar la imagen');
+    await audit('item.image_remove', `Imagen quitada de ${item.name}`);
     return Astro.redirect(`${here}?ok=image-removed`, 303);
   }
   if (form.get('intent') === 'make_cover') {
     if (!isUuid(imageId) || !(await setCoverImage(center.id, item.id, imageId))) return imageFailure('No se pudo cambiar la portada');
+    await audit('item.image_cover', `Portada cambiada en ${item.name}`);
     return Astro.redirect(`${here}?ok=cover-changed`, 303);
   }
 
   const parsed = parseItem(form, center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await updateItem(center.id, item.id, parsed.value);
+  await audit('item.update', `Artículo guardado: ${parsed.value.name}`);
   return Astro.redirect(`${here}?ok=item-saved`, 303);
 }
 

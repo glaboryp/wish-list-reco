@@ -4,6 +4,7 @@ import ImageUpload from "../../../components/admin/ImageUpload.astro";
 import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass } from "../../../components/admin/ui";
 import { parseAppearance } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
+import { recordAudit } from "../../../lib/repo/audit";
 import { updateAppearance } from "../../../lib/repo/centers";
 
 const guard = await guardCenter(Astro);
@@ -15,6 +16,7 @@ if (Astro.request.method === 'POST') {
   const parsed = parseAppearance(await Astro.request.formData(), center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await updateAppearance(center.id, parsed.value);
+  await recordAudit({ centerId: center.id, actorEmail: actor.email, action: 'appearance.update', entityType: 'center', entityId: center.id, summary: 'Apariencia actualizada' });
   return Astro.redirect(`${here}?ok=1`, 303);
 }
 ---

@@ -4,16 +4,16 @@ import { expect, test, type BrowserContext } from '@playwright/test';
 const secret = new TextEncoder().encode('e2e-session-secret-e2e-session-secret');
 const ORIGIN = 'http://localhost:4321';
 
-const mint = (email: string) =>
-    new SignJWT({ email })
+const mint = (email: string, sv: number | null = 0) =>
+    new SignJWT(sv === null ? { email } : { email, sv })
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(`uid-${email}`)
         .setIssuedAt()
         .setExpirationTime('1h')
         .sign(secret);
 
-async function signIn(context: BrowserContext, email: string) {
-    await context.addCookies([{ name: 'session', value: await mint(email), url: ORIGIN }]);
+async function signIn(context: BrowserContext, email: string, sv: number | null = 0) {
+    await context.addCookies([{ name: 'session', value: await mint(email, sv), url: ORIGIN }]);
 }
 
 test.describe('admin access control', () => {
@@ -203,5 +203,58 @@ test.describe('donations panel', () => {
         expect((await page.goto('/recoletos/admin/donations?page=999&item=nope'))?.status()).toBe(200);
         await expect(page.getByText(/2 donaciones/)).toBeVisible();
         await expect(page.getByRole('navigation', { name: 'Paginación' })).toHaveCount(0);
+    });
+});
+
+test.describe('audit log', () => {
+    test('managers see the history of their own center, newest first', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/audit');
+        await expect(page.getByRole('heading', { name: 'Historial de cambios' })).toBeVisible();
+        const rows = page.locator('tbody tr');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.first()).toContainText('Artículo guardado: Cáliz');
+        await expect(rows.first()).toContainText('12:00');
+        await expect(page.getByRole('navigation', { name: 'Paginación' })).toHaveCount(0);
+    });
+
+    test('is closed to other centers and anonymous visitors', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        expect((await page.goto('/otro/admin/audit'))?.status()).toBe(403);
+        await context.clearCookies();
+        await page.goto('/recoletos/admin/audit');
+        await expect(page).toHaveURL(/\/login$/);
+    });
+});
+
+test.describe('signing out everywhere', () => {
+    const unique = (label: string) => `session-${label}-${Date.now()}@example.org`;
+
+    test('a token without the sv claim keeps working until the version is bumped', async ({ page, context }) => {
+        await signIn(context, unique('legacy'), null);
+        expect((await page.goto('/recoletos/admin'))?.status()).toBe(200);
+    });
+
+    test('the button invalidates cookies issued before it', async ({ page, context }) => {
+        const email = unique('revoke');
+        await signIn(context, email, 0);
+        await page.goto('/recoletos/admin');
+        await page.getByText('Mi cuenta').click();
+        await page.getByRole('button', { name: 'Cerrar sesión en todos los dispositivos' }).click();
+        await expect(page).toHaveURL(/\/login$/);
+
+        await context.clearCookies();
+        await signIn(context, email, 0);
+        await page.goto('/recoletos/admin');
+        await expect(page).toHaveURL(/\/login$/);
+
+        await context.clearCookies();
+        await signIn(context, email, null);
+        await page.goto('/recoletos/admin');
+        await expect(page).toHaveURL(/\/login$/);
+
+        await context.clearCookies();
+        await signIn(context, email, 1);
+        expect((await page.goto('/recoletos/admin'))?.status()).toBe(200);
     });
 });

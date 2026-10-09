@@ -31,6 +31,8 @@ import {
   setCoverImage,
   updateItem,
 } from '../../lib/repo/items';
+import { listAudit, recordAudit } from '../../lib/repo/audit';
+import { bumpSessionVersion, getSessionVersion } from '../../lib/repo/sessions';
 import { addCenterUser, findMembership, removeCenterUser } from '../../lib/repo/users';
 
 const itemInput = {
@@ -478,5 +480,52 @@ describe.skipIf(!databaseUrl)('deleting files from Blob', () => {
     expect(await removeOrArchiveItem(centerId, kept)).toBe('archived');
     expect(mockDel).not.toHaveBeenCalled();
     await sql`DELETE FROM donations WHERE item_id = ${kept}`;
+  });
+});
+
+describe.skipIf(!databaseUrl)('audit log and session versions', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  let centerId: string;
+  let otherId: string;
+  const email = `audit-${suffix}@example.org`;
+
+  beforeAll(async () => {
+    centerId = (await createCenter({ slug: `it-au-${suffix}`, name: 'Audit' }))!.id;
+    otherId = (await createCenter({ slug: `it-ao-${suffix}`, name: 'Other' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM user_sessions WHERE email = ${email}`;
+    await sql`DELETE FROM centers WHERE id IN (${centerId}, ${otherId})`;
+  });
+
+  it('lists entries newest first, scoped to the center and paginated', async () => {
+    await sql`
+      INSERT INTO audit_log (center_id, actor_email, action, entity_type, summary, created_at)
+      SELECT ${centerId}, ${email}, 'item.update', 'item', 'change ' || n, now() - ((52 - n) || ' minutes')::interval
+      FROM generate_series(0, 51) AS n
+    `;
+    await recordAudit({ centerId: otherId, actorEmail: email, action: 'item.update', entityType: 'item', summary: 'foreign' });
+    const first = await listAudit(centerId, 1);
+    expect(first.total).toBe(52);
+    expect(first.rows).toHaveLength(50);
+    expect(first.rows[0].summary).toBe('change 51');
+    expect(first.rows.some((row) => row.summary === 'foreign')).toBe(false);
+    expect((await listAudit(centerId, 2)).rows).toHaveLength(2);
+  });
+
+  it('does not throw on a bad center reference', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(
+      recordAudit({ centerId: '99999999-9999-4999-8999-999999999999', actorEmail: email, action: 'x', entityType: 'x', summary: 'x' }),
+    ).resolves.toBeUndefined();
+    spy.mockRestore();
+  });
+
+  it('starts at 0 and increments per bump, case-insensitively', async () => {
+    expect(await getSessionVersion(email)).toBe(0);
+    expect(await bumpSessionVersion(email)).toBe(1);
+    expect(await bumpSessionVersion(email.toUpperCase())).toBe(2);
+    expect(await getSessionVersion(email)).toBe(2);
   });
 });

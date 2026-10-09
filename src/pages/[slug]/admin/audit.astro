@@ -1,0 +1,63 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { cardClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
+import { guardCenter } from "../../../lib/auth/guard";
+import { formatDateTime } from "../../../lib/format";
+import { AUDIT_PAGE_SIZE, listAudit } from "../../../lib/repo/audit";
+
+const guard = await guardCenter(Astro);
+if (guard instanceof Response) return guard;
+const { actor, center } = guard;
+const here = `/${center.slug}/admin/audit`;
+
+const requested = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const firstPage = await listAudit(center.id, Number.isFinite(requested) ? requested : 1);
+const totalPages = Math.max(1, Math.ceil(firstPage.total / AUDIT_PAGE_SIZE));
+const page = Math.min(Math.max(1, Number.isFinite(requested) ? requested : 1), totalPages);
+const { rows } = page === requested ? firstPage : await listAudit(center.id, page);
+const pageHref = (target: number) => (target > 1 ? `${here}?page=${target}` : here);
+---
+
+<AdminLayout
+  title="Historial de cambios"
+  intro="Quién ha cambiado qué en el panel de este centro, de lo más reciente a lo más antiguo."
+  actor={actor}
+  center={center}
+  active="audit"
+>
+  <div class={cardClass}>
+    {rows.length === 0 ? (
+      <p class="text-base text-muted">Todavía no hay cambios registrados.</p>
+    ) : (
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th class={thClass}>Fecha</th>
+            <th class={thClass}>Quién</th>
+            <th class={thClass}>Qué</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((entry) => (
+            <tr>
+              <td class={`${tdClass} tabular`} data-label="Fecha">{formatDateTime(entry.created_at)}</td>
+              <td class={tdClass} data-label="Quién">{entry.actor_email}</td>
+              <td class={tdClass} data-label="Qué">{entry.summary}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    {totalPages > 1 && (
+      <nav class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4" aria-label="Paginación">
+        {page > 1
+          ? <a href={pageHref(page - 1)} rel="prev" class={secondaryButtonClass}>Anterior</a>
+          : <span></span>}
+        <span class="text-base text-muted">Página {page} de {totalPages}</span>
+        {page < totalPages
+          ? <a href={pageHref(page + 1)} rel="next" class={secondaryButtonClass}>Siguiente</a>
+          : <span></span>}
+      </nav>
+    )}
+  </div>
+</AdminLayout>

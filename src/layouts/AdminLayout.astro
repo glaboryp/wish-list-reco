@@ -11,7 +11,7 @@ interface Props {
   intro?: string;
   actor: Actor;
   center?: Center;
-  active?: 'appearance' | 'items' | 'donations' | 'users' | 'centers';
+  active?: 'appearance' | 'items' | 'donations' | 'users' | 'audit' | 'centers';
 }
 
 const { title, intro, actor, center, active } = Astro.props;
@@ -42,6 +42,7 @@ const nav = center
       { key: 'items', label: 'Artículos', href: `${base}/items` },
       { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
       { key: 'users', label: 'Encargadas', href: `${base}/users` },
+      { key: 'audit', label: 'Historial', href: `${base}/audit` },
     ]
   : [{ key: 'centers', label: 'Centros', href: '/admin' }];
 ---
@@ -89,12 +90,21 @@ const nav = center
                 <span class="sr-only">(se abre en una pestaña nueva)</span>
               </a>
             )}
-            <form method="post" action="/api/auth/logout">
-              <button type="submit" class="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-base font-semibold text-muted transition-colors hover:bg-surface hover:text-ink">
+            <details class="relative">
+              <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-base font-semibold text-muted transition-colors hover:bg-surface hover:text-ink">
                 <Icon name="sign-out" class="h-4 w-4" />
-                Salir
-              </button>
-            </form>
+                Mi cuenta
+              </summary>
+              <div class="absolute right-0 z-10 mt-1 w-72 space-y-2 rounded-lg border border-line bg-white p-3 shadow-lg">
+                <p class="truncate px-1 text-sm text-muted">{actor.email}</p>
+                <form method="post" action="/api/auth/logout">
+                  <button type="submit" class="min-h-11 w-full rounded-lg px-3 text-left text-base font-semibold text-ink hover:bg-surface">Salir</button>
+                </form>
+                <form method="post" action="/api/auth/logout-all">
+                  <button type="submit" class="min-h-11 w-full rounded-lg px-3 text-left text-base font-semibold text-ink hover:bg-surface">Cerrar sesión en todos los dispositivos</button>
+                </form>
+              </div>
+            </details>
           </div>
         </div>
         {center && (

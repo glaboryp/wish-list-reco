@@ -6,6 +6,7 @@ import { parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { formatEuro } from "../../../../lib/format";
 import { positionOptions } from "../../../../lib/admin/positions";
+import { recordAudit } from "../../../../lib/repo/audit";
 import { createItem, listAdminItems } from "../../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
@@ -16,7 +17,8 @@ const here = `/${center.slug}/admin/items`;
 if (Astro.request.method === 'POST') {
   const parsed = parseItem(await Astro.request.formData(), center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
-  await createItem(center.id, parsed.value);
+  const itemId = await createItem(center.id, parsed.value);
+  await recordAudit({ centerId: center.id, actorEmail: actor.email, action: 'item.create', entityType: 'item', entityId: itemId, summary: `Artículo creado: ${parsed.value.name}` });
   return Astro.redirect(`${here}?ok=item-created`, 303);
 }
 

@@ -2,6 +2,8 @@ const RECOLETOS_ID = '11111111-1111-4111-8111-111111111111';
 const OTRO_ID = '22222222-2222-4222-8222-222222222222';
 const ITEM_ID = '33333333-3333-4333-8333-333333333333';
 const MANAGER_EMAIL = 'manager@example.org';
+const isManager = (email: unknown) => email === MANAGER_EMAIL || (typeof email === 'string' && /^session-.+@example\.org$/.test(email));
+const sessionVersions = new Map<string, number>();
 
 const baseCenter = {
   status: 'active',
@@ -37,12 +39,29 @@ const item = {
   alt_text: null,
 };
 
+const auditRows = [
+  { id: '66666666-6666-4666-8666-666666666662', center_id: RECOLETOS_ID, actor_email: MANAGER_EMAIL, action: 'item.update', entity_type: 'item', entity_id: ITEM_ID, summary: 'Artículo guardado: Cáliz', created_at: '2026-10-02T10:00:00Z' },
+  { id: '66666666-6666-4666-8666-666666666661', center_id: RECOLETOS_ID, actor_email: 'second@example.org', action: 'appearance.update', entity_type: 'center', entity_id: RECOLETOS_ID, summary: 'Apariencia actualizada', created_at: '2026-10-01T10:00:00Z' },
+];
+
 export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
   const has = (value: string) => values.includes(value);
 
+  if (text.includes('user_sessions')) {
+    const email = String(values[0]);
+    if (text.includes('INSERT')) {
+      sessionVersions.set(email, (sessionVersions.get(email) ?? 0) + 1);
+    }
+    return text.includes('INSERT') || sessionVersions.has(email) ? [{ session_version: sessionVersions.get(email) ?? 0 }] : [];
+  }
+  if (text.includes('INSERT INTO audit_log')) return [];
+  if (text.includes('FROM audit_log')) {
+    if (text.includes('COUNT(*)')) return [{ total: has(RECOLETOS_ID) ? '2' : '0' }];
+    return has(RECOLETOS_ID) ? auditRows : [];
+  }
   if (text.includes('JOIN centers')) {
-    return has(MANAGER_EMAIL) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
+    return values.some(isManager) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
   }
   if (text.includes('SELECT email, firebase_uid')) {
     return has(RECOLETOS_ID)
@@ -53,7 +72,7 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
       : [];
   }
   if (text.includes('FROM center_users')) {
-    return has(RECOLETOS_ID) && has(MANAGER_EMAIL) ? [{ ok: 1 }] : [];
+    return has(RECOLETOS_ID) && values.some(isManager) ? [{ ok: 1 }] : [];
   }
   if (text.includes('FROM centers')) {
     const found = centers.filter((center) => has(center.slug));
