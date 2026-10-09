@@ -1,5 +1,6 @@
 ---
 import Icon from "./Icon.astro";
+import ShareButton from "./ShareButton.astro";
 import { DEFAULT_FEE_SCHEDULE, type FeeSchedule } from "../lib/fees";
 
 interface Props {
@@ -98,6 +99,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 <div id={`${buttonId}-thanks`} class="hidden space-y-4" role="status">
   <h3 class="text-xl font-bold text-ink">¡Gracias por tu donación!</h3>
   <p class="text-base text-ink/90">Tu aportación a «{itemName}» ya cuenta y {centerName} te lo agradece de corazón.</p>
+  <ShareButton url={`${Astro.url.origin}/${slug}/item/${itemId}`} text={`${itemName} - ${centerName}`} label="Compartir para que otros ayuden" />
   <button type="button" data-reload class="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-base font-semibold text-white" style="background-color: var(--primary);">
     Ver el artículo actualizado
   </button>

@@ -4,6 +4,7 @@ import WishlistItem from "../../components/WishlistItem.astro";
 import { formatEuro } from "../../lib/format";
 import { getCenterBySlug } from "../../lib/repo/centers";
 import { listPublicItems } from "../../lib/repo/items";
+import { buildCenterMeta } from "../../lib/seo";
 
 const { slug } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;
@@ -16,9 +17,18 @@ const items = await listPublicItems(center.id);
 const paragraphs = center.hero_text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 const totalGoal = items.reduce((sum, item) => sum + item.goal, 0);
 const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item.goal), 0);
+const meta = buildCenterMeta({
+  name: center.name,
+  heroTitle: center.hero_title,
+  heroText: center.hero_text,
+  heroImage: center.hero_image_url,
+  logo: center.logo_url,
+  path: Astro.url.pathname,
+  origin: Astro.url.origin,
+});
 ---
 
-<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color}>
+<CenterPage title={meta.title} description={meta.description} image={meta.image} canonical={meta.canonical} primaryColor={center.primary_color}>
   <section
     class="relative isolate mx-4 mt-6 flex min-h-[420px] items-end overflow-hidden rounded-2xl sm:min-h-[520px]"
     style="background: linear-gradient(135deg, var(--primary-hover), var(--primary));"

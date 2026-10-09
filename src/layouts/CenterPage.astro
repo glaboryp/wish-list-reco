@@ -6,11 +6,14 @@ import { darken, isHexColor } from "../lib/color";
 
 interface Props {
   title: string;
+  description?: string;
+  image?: string | null;
+  canonical?: string;
   primaryColor?: string;
   paypalClientId?: string | null;
 }
 
-const { title, primaryColor = '#007986', paypalClientId = null } = Astro.props;
+const { title, description, image = null, canonical = Astro.url.origin + Astro.url.pathname, primaryColor = '#007986', paypalClientId = null } = Astro.props;
 const color = isHexColor(primaryColor) ? primaryColor : '#007986';
 const hover = darken(color, 0.2);
 ---
@@ -19,9 +22,22 @@ const hover = darken(color, 0.2);
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/webp" href="/favicon.webp" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    <link rel="canonical" href={canonical} />
+    {description && <meta name="description" content={description} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Listas de deseos" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:title" content={title} />
+    <meta property="og:url" content={canonical} />
+    {description && <meta property="og:description" content={description} />}
+    {image && <meta property="og:image" content={image} />}
+    <meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:title" content={title} />
+    {description && <meta name="twitter:description" content={description} />}
+    {image && <meta name="twitter:image" content={image} />}
     {paypalClientId && (
       <script src={`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=EUR&intent=capture&disable-funding=paylater&components=buttons`} data-sdk-integration-source="astro" data-namespace="paypal"></script>
     )}
