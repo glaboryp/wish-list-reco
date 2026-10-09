@@ -62,7 +62,7 @@ export async function voidManualDonation(centerId: string, donationId: string): 
 export async function voidPaypalDonation(
   centerId: string,
   donationId: string,
-  input: { reason: string; actorEmail: string },
+  input: { reason: string; actorEmail: string | null },
 ): Promise<'voided' | 'already_voided' | 'missing'> {
   const rows = await sql`
     UPDATE donations SET voided_at = NOW(), voided_by = ${input.actorEmail}, void_reason = ${input.reason}
@@ -74,6 +74,22 @@ export async function voidPaypalDonation(
     SELECT 1 AS ok FROM donations WHERE id = ${donationId} AND center_id = ${centerId} AND source = 'paypal'
   `;
   return existing.length > 0 ? 'already_voided' : 'missing';
+}
+
+export interface LivePaypalDonation {
+  id: string;
+  paypal_capture_id: string;
+}
+
+export async function listLivePaypalDonations(centerId: string, sinceDays: number, limit: number): Promise<LivePaypalDonation[]> {
+  const rows = await sql`
+    SELECT id, paypal_capture_id FROM donations
+    WHERE center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
+      AND created_at > NOW() - make_interval(days => ${sinceDays}::int)
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}
+  `;
+  return rows as LivePaypalDonation[];
 }
 
 export const DONATIONS_PAGE_SIZE = 50;

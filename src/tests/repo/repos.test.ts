@@ -80,6 +80,8 @@ describe('donations repository', () => {
     expect(await voidPaypalDonation('c', 'd1', input)).toBe('already_voided');
     mockSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     expect(await voidPaypalDonation('c', 'd2', input)).toBe('missing');
+    mockSql.mockResolvedValueOnce([{ id: 'd3' }]);
+    expect(await voidPaypalDonation('c', 'd3', { reason: 'x', actorEmail: null })).toBe('voided');
   });
 });
 
