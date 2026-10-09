@@ -38,6 +38,9 @@ test.describe('admin access control', () => {
     test('a manager reaches the panel of their own center', async ({ page, context }) => {
         await signIn(context, 'manager@example.org');
         await page.goto('/recoletos/admin');
+        await expect(page.getByRole('heading', { name: 'Resumen' })).toBeVisible();
+        await page.getByRole('link', { name: 'Apariencia' }).click();
+        await expect(page).toHaveURL(/\/recoletos\/admin\/appearance$/);
         await expect(page.getByRole('heading', { name: 'Apariencia' })).toBeVisible();
     });
 
@@ -137,7 +140,7 @@ test.describe('voiding PayPal donations', () => {
 test.describe('appearance images', () => {
     test('the cover and logo can be removed, and the choice is sent with the form', async ({ page, context }) => {
         await signIn(context, 'manager@example.org');
-        await page.goto('/recoletos/admin');
+        await page.goto('/recoletos/admin/appearance');
 
         const cover = page.locator('[data-upload]', { hasText: 'Imagen de portada' });
         const logo = page.locator('[data-upload]', { hasText: 'Logo del centro' });
@@ -203,5 +206,50 @@ test.describe('donations panel', () => {
         expect((await page.goto('/recoletos/admin/donations?page=999&item=nope'))?.status()).toBe(200);
         await expect(page.getByText(/2 donaciones/)).toBeVisible();
         await expect(page.getByRole('navigation', { name: 'Paginación' })).toHaveCount(0);
+    });
+});
+
+test.describe('admin dashboard', () => {
+    test('summarizes the campaign with the same totals as the donations list', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin');
+        await expect(page.locator('[data-stat="raised"]')).toContainText('25,00');
+        await expect(page.locator('[data-stat="count"]')).toContainText('2');
+        await expect(page.locator('[data-section="items-by-status"]')).toContainText('Visibles');
+        await expect(page.locator('[data-section="near-completion"]')).toContainText('Casulla');
+        await expect(page.locator('[data-section="near-completion"]')).not.toContainText('Cáliz');
+        await expect(page.locator('[data-section="recent"] tbody tr')).toHaveCount(2);
+    });
+});
+
+test.describe('donations CSV export', () => {
+    test('requires a session and stays inside the center', async ({ request, context }) => {
+        const anonymous = await request.get('/recoletos/admin/donations.csv', { maxRedirects: 0 });
+        expect(anonymous.status()).toBe(302);
+
+        await signIn(context, 'manager@example.org');
+        expect((await context.request.get('/otro/admin/donations.csv')).status()).toBe(403);
+    });
+
+    test('downloads an Excel friendly file with every donation', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/donations');
+        await expect(page.getByRole('link', { name: 'Exportar CSV' })).toHaveAttribute('href', '/recoletos/admin/donations.csv');
+
+        const response = await context.request.get('/recoletos/admin/donations.csv');
+        expect(response.status()).toBe(200);
+        expect(response.headers()['content-type']).toContain('text/csv');
+        expect(response.headers()['content-disposition']).toContain('attachment');
+        const body = await response.text();
+        expect(body.startsWith('\uFEFFFecha;Art')).toBe(true);
+        expect(body).toContain(';10,00;0,66;PayPal;vigente;');
+        expect(body).toContain(';15,00;0,00;Manual;vigente;');
+    });
+
+    test('the export link keeps the item filter', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        const item = '33333333-3333-4333-8333-333333333333';
+        await page.goto(`/recoletos/admin/donations?item=${item}`);
+        await expect(page.getByRole('link', { name: 'Exportar CSV' })).toHaveAttribute('href', `/recoletos/admin/donations.csv?item=${item}`);
     });
 });

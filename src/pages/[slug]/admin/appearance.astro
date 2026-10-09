@@ -1,0 +1,144 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import ImageUpload from "../../../components/admin/ImageUpload.astro";
+import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass } from "../../../components/admin/ui";
+import { parseAppearance } from "../../../lib/admin/forms";
+import { guardCenter } from "../../../lib/auth/guard";
+import { updateAppearance } from "../../../lib/repo/centers";
+
+const guard = await guardCenter(Astro);
+if (guard instanceof Response) return guard;
+const { actor, center } = guard;
+const here = `/${center.slug}/admin/appearance`;
+
+if (Astro.request.method === 'POST') {
+  const parsed = parseAppearance(await Astro.request.formData(), center.slug);
+  if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
+  await updateAppearance(center.id, parsed.value);
+  return Astro.redirect(`${here}?ok=1`, 303);
+}
+---
+
+<AdminLayout
+  title="Apariencia"
+  intro="Aquí cambias cómo se ve la página pública de tu centro. Los cambios se ven en tu web en cuanto pulses Guardar."
+  actor={actor}
+  center={center}
+  active="appearance"
+>
+  <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <form method="post" class={`${cardClass} space-y-8`}>
+      <section class="space-y-5">
+        <h2 class="text-xl font-bold text-ink">Portada</h2>
+        <div>
+          <label class={labelClass} for="name">Nombre del centro</label>
+          <input id="name" name="name" class={inputClass} value={center.name} maxlength="80" required />
+          <p class={helpClass}>Se muestra en el listado de centros y en tu web.</p>
+        </div>
+        <div>
+          <label class={labelClass} for="hero_title">Título principal de tu web</label>
+          <input id="hero_title" name="hero_title" class={inputClass} value={center.hero_title} maxlength="200" />
+          <p class={helpClass}>Es el texto grande que se ve sobre la imagen de portada. Si lo dejas vacío se usa el nombre del centro.</p>
+        </div>
+        <ImageUpload
+          slug={center.slug}
+          name="hero_image_url"
+          label="Imagen de portada"
+          help="La foto grande de la parte de arriba de tu web."
+          current={center.hero_image_url}
+          removable
+        />
+        <ImageUpload
+          slug={center.slug}
+          name="logo_url"
+          label="Logo del centro"
+          help="Aparece sobre el título de tu web y en el listado de centros."
+          current={center.logo_url}
+          removable
+        />
+      </section>
+
+      <section class="space-y-5 border-t border-line pt-8">
+        <h2 class="text-xl font-bold text-ink">Explicación del proyecto</h2>
+        <div>
+          <label class={labelClass} for="hero_text">Texto de la explicación</label>
+          <textarea id="hero_text" name="hero_text" class={inputClass} rows="8" maxlength="4000">{center.hero_text}</textarea>
+          <p class={helpClass}>
+            Se muestra en la sección «Explicación del proyecto» de tu web, debajo de la portada. Para separar párrafos deja una línea en blanco.
+          </p>
+        </div>
+      </section>
+
+      <section class="space-y-5 border-t border-line pt-8">
+        <h2 class="text-xl font-bold text-ink">Color</h2>
+        <div>
+          <label class={labelClass} for="primary_color">Color de tu web</label>
+          <div class="flex items-center gap-4">
+            <input
+              id="primary_color"
+              name="primary_color"
+              type="color"
+              value={center.primary_color}
+              class="h-12 w-20 cursor-pointer rounded-lg border border-line-strong bg-white p-1"
+            />
+            <p class="text-sm text-muted" data-color-hint>Es el color de los botones de tu web.</p>
+          </div>
+          <p class={helpClass}>Si el color es demasiado claro no se podrá guardar, porque el texto blanco de los botones no se leería.</p>
+        </div>
+      </section>
+
+      <div class={formFooterClass}>
+        <button type="submit" class={buttonClass}>Guardar cambios</button>
+      </div>
+    </form>
+
+    <aside class={`${cardClass} order-first space-y-4 lg:sticky lg:top-6 lg:order-none`} aria-label="Vista previa">
+      <h2 class="text-lg font-bold text-ink">Así quedarán tus botones</h2>
+      <div class="rounded-lg bg-gray-800 px-4 py-8 text-center">
+        <p class="mb-5 text-xl font-bold text-white" data-preview-title>{center.hero_title || center.name}</p>
+        <span
+          data-preview-button
+          class="inline-block rounded-lg px-5 py-2.5 font-semibold text-white"
+          style={`background-color: ${center.primary_color};`}
+        >
+          Ver la lista de deseos y contribuir
+        </span>
+      </div>
+      <p class="text-sm text-muted">La vista previa cambia mientras escribes. Los cambios no se aplican hasta que guardas.</p>
+    </aside>
+  </div>
+</AdminLayout>
+
+<script>
+  const color = document.getElementById('primary_color') as HTMLInputElement;
+  const title = document.getElementById('hero_title') as HTMLInputElement;
+  const name = document.getElementById('name') as HTMLInputElement;
+  const button = document.querySelector<HTMLElement>('[data-preview-button]')!;
+  const previewTitle = document.querySelector<HTMLElement>('[data-preview-title]')!;
+  const hint = document.querySelector<HTMLElement>('[data-color-hint]')!;
+
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const s = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+
+  const updateColor = () => {
+    button.style.backgroundColor = color.value;
+    const readable = 1.05 / (luminance(color.value) + 0.05) >= 4.5;
+    hint.textContent = readable
+      ? 'Es el color de los botones de tu web.'
+      : 'Este color es demasiado claro: elige uno más oscuro para poder guardarlo.';
+    hint.className = readable ? 'text-sm text-muted' : 'text-sm font-semibold text-red-800';
+  };
+  const updateTitle = () => {
+    previewTitle.textContent = title.value.trim() || name.value.trim();
+  };
+
+  color.addEventListener('input', updateColor);
+  title.addEventListener('input', updateTitle);
+  name.addEventListener('input', updateTitle);
+  updateColor();
+</script>

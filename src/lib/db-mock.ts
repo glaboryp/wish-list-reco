@@ -37,6 +37,15 @@ const item = {
   alt_text: null,
 };
 
+const nearlyDoneItem = {
+  ...item,
+  id: '33333333-3333-4333-8333-333333333334',
+  name: 'Casulla',
+  goal_amount: '100',
+  raised_amount: '80',
+  sort_order: 1,
+};
+
 export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
   const has = (value: string) => values.includes(value);
@@ -86,7 +95,7 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
       : [];
   }
   if (text.includes('FROM items')) {
-    return has(RECOLETOS_ID) ? [item] : [];
+    return has(RECOLETOS_ID) ? [item, nearlyDoneItem] : [];
   }
   return [];
 }

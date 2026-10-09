@@ -1,144 +1,111 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import ImageUpload from "../../../components/admin/ImageUpload.astro";
-import { buttonClass, cardClass, formFooterClass, helpClass, inputClass, labelClass } from "../../../components/admin/ui";
-import { parseAppearance } from "../../../lib/admin/forms";
+import { cardClass, chipClass, linkClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
+import { countItemsByStatus, itemsNearCompletion } from "../../../lib/dashboard";
+import { formatDateTime, formatEuro } from "../../../lib/format";
 import { guardCenter } from "../../../lib/auth/guard";
-import { updateAppearance } from "../../../lib/repo/centers";
+import { getDashboard } from "../../../lib/repo/donations";
 
 const guard = await guardCenter(Astro);
 if (guard instanceof Response) return guard;
 const { actor, center } = guard;
-const here = `/${center.slug}/admin`;
+const base = `/${center.slug}/admin`;
 
-if (Astro.request.method === 'POST') {
-  const parsed = parseAppearance(await Astro.request.formData(), center.slug);
-  if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
-  await updateAppearance(center.id, parsed.value);
-  return Astro.redirect(`${here}?ok=1`, 303);
-}
+const { netRaised, donationCount, recent, items } = await getDashboard(center.id);
+const counts = countItemsByStatus(items);
+const nearCompletion = itemsNearCompletion(items);
+const statusCards = [
+  { label: 'Visibles', value: counts.visible },
+  { label: 'Completados', value: counts.completed },
+  { label: 'Ocultos', value: counts.hidden },
+  { label: 'Archivados', value: counts.archived },
+];
 ---
 
 <AdminLayout
-  title="Apariencia"
-  intro="Aquí cambias cómo se ve la página pública de tu centro. Los cambios se ven en tu web en cuanto pulses Guardar."
+  title="Resumen"
+  intro="Cómo va la campaña de tu centro de un vistazo."
   actor={actor}
   center={center}
-  active="appearance"
+  active="dashboard"
 >
-  <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-    <form method="post" class={`${cardClass} space-y-8`}>
-      <section class="space-y-5">
-        <h2 class="text-xl font-bold text-ink">Portada</h2>
-        <div>
-          <label class={labelClass} for="name">Nombre del centro</label>
-          <input id="name" name="name" class={inputClass} value={center.name} maxlength="80" required />
-          <p class={helpClass}>Se muestra en el listado de centros y en tu web.</p>
-        </div>
-        <div>
-          <label class={labelClass} for="hero_title">Título principal de tu web</label>
-          <input id="hero_title" name="hero_title" class={inputClass} value={center.hero_title} maxlength="200" />
-          <p class={helpClass}>Es el texto grande que se ve sobre la imagen de portada. Si lo dejas vacío se usa el nombre del centro.</p>
-        </div>
-        <ImageUpload
-          slug={center.slug}
-          name="hero_image_url"
-          label="Imagen de portada"
-          help="La foto grande de la parte de arriba de tu web."
-          current={center.hero_image_url}
-          removable
-        />
-        <ImageUpload
-          slug={center.slug}
-          name="logo_url"
-          label="Logo del centro"
-          help="Aparece sobre el título de tu web y en el listado de centros."
-          current={center.logo_url}
-          removable
-        />
-      </section>
+  <div class="grid gap-4 sm:grid-cols-2">
+    <div class={cardClass} data-stat="raised">
+      <p class="text-base font-semibold text-muted">Total recaudado</p>
+      <p class="tabular mt-1 text-3xl font-bold text-ink">{formatEuro(netRaised)}</p>
+      <p class="mt-1 text-sm text-muted">Sin contar las donaciones anuladas ni las comisiones.</p>
+    </div>
+    <div class={cardClass} data-stat="count">
+      <p class="text-base font-semibold text-muted">Donaciones</p>
+      <p class="tabular mt-1 text-3xl font-bold text-ink">{donationCount}</p>
+      <p class="mt-1 text-sm"><a href={`${base}/donations`} class={linkClass}>Ver todas</a></p>
+    </div>
+  </div>
 
-      <section class="space-y-5 border-t border-line pt-8">
-        <h2 class="text-xl font-bold text-ink">Explicación del proyecto</h2>
+  <div class={cardClass} data-section="items-by-status">
+    <h2 class="mb-4 text-xl font-bold text-ink">Artículos por estado</h2>
+    <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {statusCards.map((card) => (
         <div>
-          <label class={labelClass} for="hero_text">Texto de la explicación</label>
-          <textarea id="hero_text" name="hero_text" class={inputClass} rows="8" maxlength="4000">{center.hero_text}</textarea>
-          <p class={helpClass}>
-            Se muestra en la sección «Explicación del proyecto» de tu web, debajo de la portada. Para separar párrafos deja una línea en blanco.
-          </p>
+          <dt class="text-base text-muted">{card.label}</dt>
+          <dd class="tabular text-2xl font-bold text-ink">{card.value}</dd>
         </div>
-      </section>
+      ))}
+    </dl>
+  </div>
 
-      <section class="space-y-5 border-t border-line pt-8">
-        <h2 class="text-xl font-bold text-ink">Color</h2>
-        <div>
-          <label class={labelClass} for="primary_color">Color de tu web</label>
-          <div class="flex items-center gap-4">
-            <input
-              id="primary_color"
-              name="primary_color"
-              type="color"
-              value={center.primary_color}
-              class="h-12 w-20 cursor-pointer rounded-lg border border-line-strong bg-white p-1"
-            />
-            <p class="text-sm text-muted" data-color-hint>Es el color de los botones de tu web.</p>
-          </div>
-          <p class={helpClass}>Si el color es demasiado claro no se podrá guardar, porque el texto blanco de los botones no se leería.</p>
-        </div>
-      </section>
+  <div class={cardClass} data-section="near-completion">
+    <h2 class="mb-4 text-xl font-bold text-ink">Casi completos</h2>
+    {nearCompletion.length === 0 ? (
+      <p class="text-base text-muted">Ningún artículo ha llegado todavía al 75 % de lo que necesita.</p>
+    ) : (
+      <ul class="divide-y divide-line">
+        {nearCompletion.map((item) => (
+          <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3">
+            <a href={`${base}/items/${item.id}`} class={`${linkClass} text-base`}>{item.name}</a>
+            <span class="tabular text-base text-muted">
+              {formatEuro(item.raised)} de {formatEuro(item.goal)} <span class={chipClass.info}>{item.percent} %</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
 
-      <div class={formFooterClass}>
-        <button type="submit" class={buttonClass}>Guardar cambios</button>
-      </div>
-    </form>
-
-    <aside class={`${cardClass} order-first space-y-4 lg:sticky lg:top-6 lg:order-none`} aria-label="Vista previa">
-      <h2 class="text-lg font-bold text-ink">Así quedarán tus botones</h2>
-      <div class="rounded-lg bg-gray-800 px-4 py-8 text-center">
-        <p class="mb-5 text-xl font-bold text-white" data-preview-title>{center.hero_title || center.name}</p>
-        <span
-          data-preview-button
-          class="inline-block rounded-lg px-5 py-2.5 font-semibold text-white"
-          style={`background-color: ${center.primary_color};`}
-        >
-          Ver la lista de deseos y contribuir
-        </span>
-      </div>
-      <p class="text-sm text-muted">La vista previa cambia mientras escribes. Los cambios no se aplican hasta que guardas.</p>
-    </aside>
+  <div class={cardClass} data-section="recent">
+    <h2 class="mb-4 text-xl font-bold text-ink">Últimas donaciones</h2>
+    {recent.length === 0 ? (
+      <p class="text-base text-muted">Todavía no hay donaciones. Cuando alguien done, aparecerá aquí.</p>
+    ) : (
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th class={thClass}>Fecha</th>
+            <th class={thClass}>Artículo</th>
+            <th class={thClass}>Importe</th>
+            <th class={thClass}>Cómo llegó</th>
+          </tr>
+        </thead>
+        <tbody>
+          {recent.map((donation) => (
+            <tr class={donation.voided_at ? 'text-muted' : ''}>
+              <td class={`${tdClass} tabular`} data-label="Fecha">{formatDateTime(donation.created_at)}</td>
+              <td class={`${tdClass} font-semibold`} data-label="Artículo">{donation.item_name}</td>
+              <td class={`${tdClass} tabular`} data-label="Importe">
+                <span class={donation.voided_at ? 'line-through' : ''}>{formatEuro(Number(donation.amount))}</span>
+              </td>
+              <td class={tdClass} data-label="Cómo llegó">
+                {donation.voided_at
+                  ? <span class={chipClass.muted}>Anulada</span>
+                  : <span class={donation.source === 'paypal' ? chipClass.info : chipClass.muted}>{donation.source === 'paypal' ? 'PayPal' : 'Apuntada a mano'}</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="mt-4">
+      <a href={`${base}/donations`} class={secondaryButtonClass}>Ver todas las donaciones</a>
+    </div>
   </div>
 </AdminLayout>
-
-<script>
-  const color = document.getElementById('primary_color') as HTMLInputElement;
-  const title = document.getElementById('hero_title') as HTMLInputElement;
-  const name = document.getElementById('name') as HTMLInputElement;
-  const button = document.querySelector<HTMLElement>('[data-preview-button]')!;
-  const previewTitle = document.querySelector<HTMLElement>('[data-preview-title]')!;
-  const hint = document.querySelector<HTMLElement>('[data-color-hint]')!;
-
-  const luminance = (hex: string) => {
-    const [r, g, b] = [1, 3, 5].map((i) => {
-      const s = parseInt(hex.slice(i, i + 2), 16) / 255;
-      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-
-  const updateColor = () => {
-    button.style.backgroundColor = color.value;
-    const readable = 1.05 / (luminance(color.value) + 0.05) >= 4.5;
-    hint.textContent = readable
-      ? 'Es el color de los botones de tu web.'
-      : 'Este color es demasiado claro: elige uno más oscuro para poder guardarlo.';
-    hint.className = readable ? 'text-sm text-muted' : 'text-sm font-semibold text-red-800';
-  };
-  const updateTitle = () => {
-    previewTitle.textContent = title.value.trim() || name.value.trim();
-  };
-
-  color.addEventListener('input', updateColor);
-  title.addEventListener('input', updateTitle);
-  name.addEventListener('input', updateTitle);
-  updateColor();
-</script>
