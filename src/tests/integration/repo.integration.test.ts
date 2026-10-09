@@ -21,6 +21,7 @@ import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonat
 import {
   addItemImage,
   createItem,
+  duplicateItem,
   getAdminItem,
   listAdminItems,
   listItemImages,
@@ -28,7 +29,9 @@ import {
   MAX_ITEM_IMAGES,
   removeItemImage,
   removeOrArchiveItem,
+  reorderItems,
   setCoverImage,
+  setItemsStatus,
   updateItem,
 } from '../../lib/repo/items';
 import { addCenterUser, findMembership, removeCenterUser } from '../../lib/repo/users';
@@ -478,5 +481,99 @@ describe.skipIf(!databaseUrl)('deleting files from Blob', () => {
     expect(await removeOrArchiveItem(centerId, kept)).toBe('archived');
     expect(mockDel).not.toHaveBeenCalled();
     await sql`DELETE FROM donations WHERE item_id = ${kept}`;
+  });
+});
+
+describe.skipIf(!databaseUrl)('reordering, duplicating and batch status', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const blob = (name: string) => `https://x.public.blob.vercel-storage.com/it-ux-${suffix}/${name}.png`;
+  let center: string;
+  let other: string;
+  const input = { name: 'x', description: 'desc', goal: 80, status: 'active' as const, sortOrder: 9999, imageUrl: null };
+  const all = async (centerId = center) => listAdminItems(centerId);
+  const live = async () => (await all()).filter((item) => item.status !== 'archived').map((item) => item.name);
+  const idOf = async (name: string) => (await all()).find((item) => item.name === name)!.id;
+
+  beforeAll(async () => {
+    center = (await createCenter({ slug: `it-ux-${suffix}`, name: 'UX' }))!.id;
+    other = (await createCenter({ slug: `it-ux2-${suffix}`, name: 'UX2' }))!.id;
+    for (const name of ['a', 'b', 'c', 'd']) await createItem(center, { ...input, name });
+  });
+
+  beforeEach(() => mockDel.mockReset());
+
+  afterAll(async () => {
+    await sql`DELETE FROM items WHERE center_id IN (${center}, ${other})`;
+    await sql`DELETE FROM centers WHERE id IN (${center}, ${other})`;
+  });
+
+  it('applies a full order in one statement and renumbers from 1', async () => {
+    const [a, b, c, d] = await Promise.all(['a', 'b', 'c', 'd'].map(idOf));
+    expect(await reorderItems(center, [d, b, a, c])).toBe(4);
+    expect(await live()).toEqual(['d', 'b', 'a', 'c']);
+    expect((await all()).map((item) => item.sortOrder)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps unlisted items after the listed ones, ignores duplicates, unknown ids and other centers', async () => {
+    const foreign = await createItem(other, input);
+    const [a, b] = await Promise.all(['a', 'b'].map(idOf));
+    await reorderItems(center, [b, b, '00000000-0000-4000-8000-000000000000', foreign, a]);
+    expect(await live()).toEqual(['b', 'a', 'd', 'c']);
+    expect((await all(other))[0].sortOrder).toBe(1);
+    expect(await reorderItems(center, [])).toBe(4);
+    expect(await live()).toEqual(['b', 'a', 'd', 'c']);
+  });
+
+  it('applies batch status changes only inside the center and compacts positions', async () => {
+    const foreign = await createItem(other, input);
+    const [a, d] = await Promise.all(['a', 'd'].map(idOf));
+    expect(await setItemsStatus(center, [a, foreign], 'archive')).toBe(1);
+    expect((await getAdminItem(other, foreign))?.status).toBe('active');
+    expect(await live()).toEqual(['b', 'd', 'c']);
+    expect((await all()).filter((item) => item.status !== 'archived').map((item) => item.sortOrder)).toEqual([1, 2, 3]);
+
+    expect(await setItemsStatus(center, [d], 'hide')).toBe(1);
+    expect((await getAdminItem(center, d))?.status).toBe('draft');
+    expect(await setItemsStatus(center, [a], 'hide')).toBe(0);
+    expect(await setItemsStatus(center, [a, d], 'show')).toBe(2);
+    expect((await getAdminItem(center, a))?.status).toBe('active');
+    expect(await live()).toHaveLength(4);
+    expect(new Set((await all()).map((item) => item.sortOrder)).size).toBe(4);
+  });
+
+  it('duplicates an item as a hidden copy at the end, with its images, and never across centers', async () => {
+    const source = await createItem(center, { ...input, name: 'src', description: 'long', goal: 12.5 });
+    await addItemImage(center, source, blob('one'));
+    await addItemImage(center, source, blob('two'));
+    const copy = (await duplicateItem(center, source))!;
+    expect(copy).toBeTruthy();
+    expect(await getAdminItem(center, copy)).toMatchObject({ name: 'Copia de src', description: 'long', goal: 12.5, status: 'draft', raised: 0 });
+    expect((await live()).at(-1)).toBe('Copia de src');
+    expect((await listItemImages(center, copy)).map((image) => image.image_url)).toEqual([blob('one'), blob('two')]);
+    expect(await duplicateItem(other, source)).toBeNull();
+    expect(await duplicateItem(center, '00000000-0000-4000-8000-000000000000')).toBeNull();
+  });
+
+  it('keeps the shared files when one of the two items drops an image or is deleted', async () => {
+    const source = await createItem(center, { ...input, name: 'shared' });
+    await addItemImage(center, source, blob('s1'));
+    const copy = (await duplicateItem(center, source))!;
+
+    const [image] = await listItemImages(center, copy);
+    expect(await removeItemImage(center, copy, image.id)).toBe(true);
+    expect(mockDel).not.toHaveBeenCalled();
+
+    const again = (await duplicateItem(center, source))!;
+    expect(await removeOrArchiveItem(center, again)).toBe('deleted');
+    expect(mockDel).not.toHaveBeenCalled();
+
+    expect(await removeOrArchiveItem(center, source)).toBe('deleted');
+    expect(mockDel).toHaveBeenCalledWith([blob('s1')]);
+  });
+
+  it('copies the long names truncated to the limit', async () => {
+    const long = await createItem(center, { ...input, name: 'L'.repeat(120) });
+    const copy = (await duplicateItem(center, long))!;
+    expect((await getAdminItem(center, copy))?.name).toHaveLength(120);
   });
 });

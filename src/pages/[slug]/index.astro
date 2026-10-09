@@ -18,7 +18,7 @@ const totalGoal = items.reduce((sum, item) => sum + item.goal, 0);
 const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item.goal), 0);
 ---
 
-<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color}>
+<CenterPage title={`${center.name} - Lista de deseos`} primaryColor={center.primary_color} skipTo="wishlist">
   <section
     class="relative isolate mx-4 mt-6 flex min-h-[420px] items-end overflow-hidden rounded-2xl sm:min-h-[520px]"
     style="background: linear-gradient(135deg, var(--primary-hover), var(--primary));"
