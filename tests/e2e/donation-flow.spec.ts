@@ -54,3 +54,12 @@ test('A non-uuid item id does not crash the page', async ({ request }) => {
     const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
     expect(response.status()).toBe(302);
 });
+
+test('Shows the anonymous donor counter', async ({ page }) => {
+    await page.goto('/recoletos');
+    await expect(page.locator('[data-donor-count]').first()).toHaveText('2 personas han donado');
+    await expect(page.locator('article [data-donor-count]').first()).toHaveText('2 personas han donado');
+
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+    await expect(page.locator('[data-donor-count]')).toHaveText('2 personas han donado');
+});
