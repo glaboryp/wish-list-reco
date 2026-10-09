@@ -7,6 +7,7 @@ import type {
   CenterStatus,
   CenterWithSecret,
   FeeSettingsInput,
+  NotifySettingsInput,
   PayPalSettingsInput,
 } from '../../types/database';
 
@@ -88,6 +89,10 @@ export async function updateFeeSettings(centerId: string, input: FeeSettingsInpu
       updated_at = NOW()
     WHERE id = ${centerId}
   `;
+}
+
+export async function updateNotifySettings(centerId: string, input: NotifySettingsInput): Promise<void> {
+  await sql`UPDATE centers SET notify_mode = ${input.mode}, updated_at = NOW() WHERE id = ${centerId}`;
 }
 
 export async function updatePaypal(centerId: string, input: PayPalSettingsInput): Promise<void> {

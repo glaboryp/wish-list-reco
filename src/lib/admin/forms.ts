@@ -2,7 +2,7 @@ import { isCenterBlobUrl } from '../blob';
 import { isValidPrimaryColor } from '../color';
 import { isUuid } from '../ids';
 import { validateSlug } from '../slug';
-import type { AppearanceInput, FeeSettingsInput, ItemInput, PayPalEnv } from '../../types/database';
+import type { AppearanceInput, FeeSettingsInput, ItemInput, NotifySettingsInput, PayPalEnv } from '../../types/database';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -175,6 +175,12 @@ export function parseFees(form: FormData): Parsed<FeeSettingsInput> {
     return fail('La cuota fija debe ser un importe entre 0 y 5 euros, por ejemplo 0,35');
   }
   return { ok: true, value: { paypalPercent, paypalFixed, cardPercent, cardFixed } };
+}
+
+export function parseNotifySettings(form: FormData): Parsed<NotifySettingsInput> {
+  const mode = text(form, 'notify_mode');
+  if (mode !== 'each' && mode !== 'none') return fail('La opción de avisos elegida no es válida');
+  return { ok: true, value: { mode } };
 }
 
 export function parseNewCenter(form: FormData): Parsed<{ slug: string; name: string }> {

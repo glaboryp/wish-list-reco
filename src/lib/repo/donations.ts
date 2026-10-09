@@ -21,6 +21,19 @@ export async function recordPaypalDonation(input: {
   return existing.length > 0 ? 'duplicate' : 'item_not_found';
 }
 
+export async function getDonationSummary(
+  centerId: string,
+  itemId: string,
+): Promise<{ name: string; goal: number; raised: number } | null> {
+  const rows = await sql`
+    SELECT i.name, i.goal_amount,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised
+    FROM items i WHERE i.id = ${itemId} AND i.center_id = ${centerId}
+  `;
+  if (rows.length === 0) return null;
+  return { name: rows[0].name, goal: parseFloat(rows[0].goal_amount), raised: parseFloat(rows[0].raised) };
+}
+
 export type ManualDonationResult =
   | { status: 'created' }
   | { status: 'missing' }
