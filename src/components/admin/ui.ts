@@ -14,10 +14,10 @@ export const formFooterClass = 'flex flex-wrap items-center gap-3 border-t borde
 
 const chip = 'inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-sm font-semibold';
 export const chipClass = {
-  ok: `${chip} bg-green-100 text-green-900`,
-  info: `${chip} bg-brand-soft text-brand-hover`,
-  warn: `${chip} bg-amber-100 text-amber-900`,
-  muted: `${chip} bg-gray-100 text-gray-700`,
+  ok: `${chip} bg-chip-ok-bg text-chip-ok-fg`,
+  info: `${chip} bg-chip-info-bg text-chip-info-fg`,
+  warn: `${chip} bg-chip-warn-bg text-chip-warn-fg`,
+  muted: `${chip} bg-chip-muted-bg text-chip-muted-fg`,
 };
 
 export const tableClass = 'stack-table w-full text-left text-base';

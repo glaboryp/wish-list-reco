@@ -1,20 +1,35 @@
 ---
 import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import EmptyState from "../../../../components/admin/EmptyState.astro";
+import Icon from "../../../../components/Icon.astro";
 import ImageUpload from "../../../../components/admin/ImageUpload.astro";
-import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../../components/admin/ui";
-import { parseItem } from "../../../../lib/admin/forms";
+import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../../components/admin/ui";
+import { parseBatch, parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { formatEuro } from "../../../../lib/format";
 import { positionOptions } from "../../../../lib/admin/positions";
-import { createItem, listAdminItems } from "../../../../lib/repo/items";
+import { createItem, listAdminItems, setItemsStatus } from "../../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
 if (guard instanceof Response) return guard;
 const { actor, center } = guard;
 const here = `/${center.slug}/admin/items`;
+const showArchivedParam = Astro.url.searchParams.get('archived') === '1' ? '&archived=1' : '';
+
+const batchOutcome = { archive: 'items-archived', show: 'items-shown', hide: 'items-hidden' } as const;
 
 if (Astro.request.method === 'POST') {
-  const parsed = parseItem(await Astro.request.formData(), center.slug);
+  const form = await Astro.request.formData();
+
+  if (form.has('batch_action')) {
+    const batch = parseBatch(form);
+    if (!batch.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(batch.error)}`, 303);
+    const changed = await setItemsStatus(center.id, batch.value.ids, batch.value.action);
+    if (changed === 0) return Astro.redirect(`${here}?error=${encodeURIComponent('Los artículos elegidos ya estaban así, no ha cambiado nada')}`, 303);
+    return Astro.redirect(`${here}?ok=${batchOutcome[batch.value.action]}${showArchivedParam}`, 303);
+  }
+
+  const parsed = parseItem(form, center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
   await createItem(center.id, parsed.value);
   return Astro.redirect(`${here}?ok=item-created`, 303);
@@ -42,45 +57,94 @@ const statusChip = (status: string, raised: number, goal: number) => {
   active="items"
 >
   <div class={cardClass}>
-    {visibleItems.length === 0 ? (
-      <p class="text-base text-muted">{items.length === 0 ? 'Todavía no hay artículos. Crea el primero con el formulario de más abajo.' : 'No hay artículos sin archivar.'}</p>
+    {items.length === 0 ? (
+      <EmptyState
+        title="Todavía no hay artículos"
+        text="Un artículo es algo que necesita tu centro y que tus donantes pueden pagar. Crea el primero y aparecerá en tu web."
+        actionLabel="Añadir el primer artículo"
+        actionHref="#nuevo-articulo"
+      />
+    ) : visibleItems.length === 0 ? (
+      <EmptyState
+        title="No hay artículos sin archivar"
+        text="Todos tus artículos están archivados y no se ven en tu web."
+        actionLabel="Mostrar los archivados"
+        actionHref={`${here}?archived=1`}
+        secondary
+      />
     ) : (
-      <table class={tableClass}>
-        <thead>
-          <tr>
-            <th class={thClass}>Artículo</th>
-            <th class={thClass}>Recaudado</th>
-            <th class={thClass}>En la web</th>
-            <th class={thClass}>Posición</th>
-            <th class={thClass}><span class="sr-only">Acciones</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleItems.map((item) => {
-            const chip = statusChip(item.status, item.raised, item.goal);
-            return (
-              <tr>
-                <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">
-                  <span class="flex items-center gap-3 max-md:flex-row-reverse">
-                    {item.imageUrl
-                      ? <img src={item.imageUrl} alt="" class="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
-                      : <span class="h-12 w-12 shrink-0 rounded-md border border-line bg-surface"></span>}
-                    <span>{item.name}</span>
-                  </span>
-                </td>
-                <td class={`${tdClass} tabular`} data-label="Recaudado">{formatEuro(item.raised)} de {formatEuro(item.goal)}</td>
-                <td class={tdClass} data-label="En la web"><span class={chipClass[chip.tone]}>{chip.label}</span></td>
-                <td class={`${tdClass} tabular`} data-label="Posición">{shownPosition.get(item.id) ?? '-'}</td>
-                <td class="py-2 text-right">
-                  <a href={`${here}/${item.id}`} class={`${secondaryButtonClass} px-4!`}>
-                    Editar<span class="sr-only"> {item.name}</span>
-                  </a>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <form method="post" data-batch-form>
+        <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line pb-4">
+          <label class="inline-flex min-h-11 items-center gap-2 text-base font-semibold text-ink">
+            <input type="checkbox" data-select-all class="h-5 w-5 accent-brand" />
+            Seleccionar todos
+          </label>
+          <p class="text-base text-muted" data-selected-count aria-live="polite">Ninguno seleccionado</p>
+          <div class="flex flex-wrap items-center gap-2 sm:ml-auto" role="group" aria-label="Acciones para los artículos seleccionados">
+            <button type="submit" name="batch_action" value="show" data-batch class={`${secondaryButtonClass} px-4!`} disabled>Mostrar en la web</button>
+            <button type="submit" name="batch_action" value="hide" data-batch class={`${secondaryButtonClass} px-4!`} disabled>Ocultar de la web</button>
+            <button type="submit" name="batch_action" value="archive" data-batch data-confirm-archive class={`${dangerButtonClass} px-4!`} disabled>Archivar</button>
+          </div>
+        </div>
+        <p class="sr-only" id="reorder-help">Para cambiar el orden, usa los botones Subir y Bajar de cada artículo, o arrastra el asa con el ratón o el dedo.</p>
+        <p class="sr-only" role="status" aria-live="polite" data-reorder-status></p>
+        <p class="mb-3 hidden rounded-lg bg-red-50 px-4 py-3 text-base text-red-900 ring-1 ring-red-200" role="alert" data-reorder-error></p>
+        <table class={tableClass}>
+          <thead>
+            <tr>
+              <th class={thClass}>Artículo</th>
+              <th class={thClass}>Recaudado</th>
+              <th class={thClass}>En la web</th>
+              <th class={thClass}>Orden</th>
+              <th class={thClass}><span class="sr-only">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody data-reorder-list data-endpoint={`/api/${center.slug}/items/reorder`}>
+            {visibleItems.map((item) => {
+              const chip = statusChip(item.status, item.raised, item.goal);
+              const reorderable = item.status !== 'archived';
+              return (
+                <tr data-row data-id={item.id} data-name={item.name} data-reorderable={reorderable ? '' : undefined}>
+                  <td class={`${tdClass} font-semibold text-ink`} data-label="Artículo">
+                    <span class="flex items-center gap-3 max-md:flex-row-reverse">
+                      <input type="checkbox" name="ids" value={item.id} data-select class="h-5 w-5 shrink-0 accent-brand" aria-label={`Seleccionar ${item.name}`} />
+                      {item.imageUrl
+                        ? <img src={item.imageUrl} alt="" class="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
+                        : <span class="h-12 w-12 shrink-0 rounded-md border border-line bg-surface"></span>}
+                      <span>{item.name}</span>
+                    </span>
+                  </td>
+                  <td class={`${tdClass} tabular`} data-label="Recaudado">{formatEuro(item.raised)} de {formatEuro(item.goal)}</td>
+                  <td class={tdClass} data-label="En la web"><span class={chipClass[chip.tone]}>{chip.label}</span></td>
+                  <td class={tdClass} data-label="Orden">
+                    {reorderable ? (
+                      <span class="flex items-center gap-1">
+                        <span class="tabular w-6 text-center" data-position>{shownPosition.get(item.id)}</span>
+                        <button type="button" data-move="-1" class={`${secondaryButtonClass} w-11 px-0!`} aria-describedby="reorder-help">
+                          <Icon name="arrow-up" class="h-5 w-5" />
+                          <span class="sr-only">Subir {item.name}</span>
+                        </button>
+                        <button type="button" data-move="1" class={`${secondaryButtonClass} w-11 px-0!`} aria-describedby="reorder-help">
+                          <Icon name="arrow-down" class="h-5 w-5" />
+                          <span class="sr-only">Bajar {item.name}</span>
+                        </button>
+                        <span data-handle class="inline-flex h-11 w-9 cursor-grab touch-none select-none items-center justify-center rounded-lg text-muted hover:bg-surface active:cursor-grabbing" aria-hidden="true" title="Arrastra para reordenar">
+                          <Icon name="dots-six-vertical" class="h-6 w-6" />
+                        </span>
+                      </span>
+                    ) : <span class="text-muted">-</span>}
+                  </td>
+                  <td class="py-2 text-right">
+                    <a href={`${here}/${item.id}`} class={`${secondaryButtonClass} px-4!`}>
+                      Editar<span class="sr-only"> {item.name}</span>
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </form>
     )}
     {archivedCount > 0 && (
       <p class="mt-4 border-t border-line pt-4 text-base text-muted">
@@ -91,12 +155,12 @@ const statusChip = (status: string, raised: number, goal: number) => {
     )}
   </div>
 
-  <details class={`${cardClass} group`} open={items.length === 0 || Astro.url.searchParams.has('error')}>
+  <details id="nuevo-articulo" class={`${cardClass} group`} open={items.length === 0 || Astro.url.searchParams.has('error')}>
     <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-xl font-bold text-ink">
       Añadir un artículo nuevo
       <span class="text-base font-semibold text-brand group-open:hidden">Abrir formulario</span>
     </summary>
-  <form method="post" class="mt-5 space-y-5">
+  <form method="post" data-guard class="mt-5 space-y-5">
     <div>
       <label class={labelClass} for="name">Nombre del artículo</label>
       <input id="name" name="name" class={inputClass} maxlength="120" required />
@@ -136,3 +200,156 @@ const statusChip = (status: string, raised: number, goal: number) => {
   </form>
   </details>
 </AdminLayout>
+
+<script>
+  import { moveAnnouncement, moveId } from '../../../../lib/admin/reorder';
+
+  const details = document.getElementById('nuevo-articulo') as HTMLDetailsElement | null;
+  const openForm = () => {
+    if (details && window.location.hash === '#nuevo-articulo') details.open = true;
+  };
+  openForm();
+  window.addEventListener('hashchange', openForm);
+
+  const batchForm = document.querySelector<HTMLFormElement>('[data-batch-form]');
+  if (batchForm) {
+    const boxes = () => Array.from(batchForm.querySelectorAll<HTMLInputElement>('input[data-select]'));
+    const selectAll = batchForm.querySelector<HTMLInputElement>('[data-select-all]')!;
+    const count = batchForm.querySelector<HTMLElement>('[data-selected-count]')!;
+    const actions = Array.from(batchForm.querySelectorAll<HTMLButtonElement>('[data-batch]'));
+
+    const syncSelection = () => {
+      const checked = boxes().filter((box) => box.checked).length;
+      count.textContent = checked === 0 ? 'Ninguno seleccionado' : checked === 1 ? '1 seleccionado' : `${checked} seleccionados`;
+      actions.forEach((button) => (button.disabled = checked === 0));
+      selectAll.checked = checked > 0 && checked === boxes().length;
+      selectAll.indeterminate = checked > 0 && checked < boxes().length;
+    };
+    selectAll.addEventListener('change', () => {
+      boxes().forEach((box) => (box.checked = selectAll.checked));
+      syncSelection();
+    });
+    boxes().forEach((box) => box.addEventListener('change', syncSelection));
+    syncSelection();
+
+    batchForm.addEventListener('submit', (event) => {
+      const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+      if (!submitter?.hasAttribute('data-confirm-archive')) return;
+      const total = boxes().filter((box) => box.checked).length;
+      const message = total === 1 ? 'Se archivará 1 artículo y dejará de verse en tu web. ¿Continuar?' : `Se archivarán ${total} artículos y dejarán de verse en tu web. ¿Continuar?`;
+      if (!confirm(message)) event.preventDefault();
+    });
+  }
+
+  const list = document.querySelector<HTMLElement>('[data-reorder-list]');
+  if (list) {
+    const status = document.querySelector<HTMLElement>('[data-reorder-status]')!;
+    const errorBox = document.querySelector<HTMLElement>('[data-reorder-error]')!;
+    const endpoint = list.dataset.endpoint!;
+    const rows = () => Array.from(list.querySelectorAll<HTMLTableRowElement>('tr[data-reorderable]'));
+    const order = () => rows().map((row) => row.dataset.id!);
+
+    const refresh = () => {
+      const all = rows();
+      all.forEach((row, index) => {
+        row.querySelector('[data-position]')!.textContent = String(index + 1);
+        row.querySelector('[data-move="-1"]')!.setAttribute('aria-disabled', String(index === 0));
+        row.querySelector('[data-move="1"]')!.setAttribute('aria-disabled', String(index === all.length - 1));
+      });
+    };
+
+    let queue: Promise<void> = Promise.resolve();
+    const save = (message: string) => {
+      const ids = order();
+      queue = queue
+        .then(async () => {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+          });
+          if (!response.ok) throw new Error('save failed');
+          errorBox.classList.add('hidden');
+          status.textContent = `${message} Orden guardado.`;
+        })
+        .catch(() => {
+          errorBox.textContent = 'No se pudo guardar el nuevo orden. Recarga la página e inténtalo de nuevo.';
+          errorBox.classList.remove('hidden');
+        });
+    };
+
+    const announce = (row: HTMLElement) => {
+      const message = moveAnnouncement(row.dataset.name ?? '', order().indexOf(row.dataset.id!) + 1, rows().length);
+      status.textContent = message;
+      return message;
+    };
+
+    list.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('button[data-move]');
+      if (!button || button.getAttribute('aria-disabled') === 'true') return;
+      const row = button.closest<HTMLTableRowElement>('tr')!;
+      const delta = Number(button.dataset.move);
+      const before = order();
+      const after = moveId(before, row.dataset.id!, delta);
+      if (after === before) return;
+      const all = rows();
+      const index = all.indexOf(row);
+      if (delta < 0) all[index - 1].before(row);
+      else all[index + 1].after(row);
+      refresh();
+      button.focus();
+      save(announce(row));
+    });
+
+    list.addEventListener('pointerdown', (event) => {
+      const handle = (event.target as Element).closest<HTMLElement>('[data-handle]');
+      if (!handle || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      const row = handle.closest<HTMLTableRowElement>('tr')!;
+      const all = rows();
+      const startIndex = all.indexOf(row);
+      const others = all.filter((other) => other !== row);
+      const mids = all.map((element) => {
+        const box = element.getBoundingClientRect();
+        return box.top + window.scrollY + box.height / 2;
+      });
+      const startPageY = event.clientY + window.scrollY;
+      let target = startIndex;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      row.classList.add('relative', 'bg-brand-soft', 'opacity-90');
+
+      const clearMarker = () => others.forEach((other) => (other.style.boxShadow = ''));
+      const move = (moveEvent: PointerEvent) => {
+        const dy = moveEvent.clientY + window.scrollY - startPageY;
+        row.style.transform = `translateY(${dy}px)`;
+        const dragMid = mids[startIndex] + dy;
+        target = all.filter((other, index) => other !== row && mids[index] < dragMid).length;
+        clearMarker();
+        if (target !== startIndex) {
+          if (target < others.length) others[target].style.boxShadow = 'inset 0 3px 0 var(--color-brand)';
+          else others[others.length - 1].style.boxShadow = 'inset 0 -3px 0 var(--color-brand)';
+        }
+        if (moveEvent.clientY < 48) window.scrollBy(0, -12);
+        else if (moveEvent.clientY > window.innerHeight - 48) window.scrollBy(0, 12);
+      };
+      const finish = (finishEvent: PointerEvent) => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', finish);
+        handle.removeEventListener('pointercancel', finish);
+        clearMarker();
+        row.style.transform = '';
+        row.classList.remove('relative', 'bg-brand-soft', 'opacity-90');
+        if (finishEvent.type === 'pointercancel' || target === startIndex) return;
+        if (target < others.length) others[target].before(row);
+        else others[others.length - 1].after(row);
+        refresh();
+        save(announce(row));
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', finish);
+      handle.addEventListener('pointercancel', finish);
+    });
+
+    refresh();
+  }
+</script>

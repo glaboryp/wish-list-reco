@@ -37,6 +37,15 @@ const item = {
   alt_text: null,
 };
 
+const secondItem = {
+  ...item,
+  id: '66666666-6666-4666-8666-666666666666',
+  name: 'Casulla',
+  goal_amount: '200',
+  raised_amount: '0',
+  sort_order: 1,
+};
+
 export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
   const has = (value: string) => values.includes(value);
@@ -84,6 +93,12 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
           created_at: '2026-01-01T00:00:00Z',
         }))
       : [];
+  }
+  if (text.includes("::text = 'archive'")) {
+    return has(RECOLETOS_ID) ? [{ id: ITEM_ID }] : [];
+  }
+  if (text.includes('AS donation_count') && !text.includes('LIMIT 1')) {
+    return has(RECOLETOS_ID) ? [item, secondItem].map((row) => ({ ...row, donation_count: '0', blocking_donation_count: '0' })) : [];
   }
   if (text.includes('FROM items')) {
     return has(RECOLETOS_ID) ? [item] : [];

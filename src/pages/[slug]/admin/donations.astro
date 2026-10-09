@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import EmptyState from "../../../components/admin/EmptyState.astro";
 import { buttonClass, cardClass, secondaryButtonClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { formatDateTime, formatEuro } from "../../../lib/format";
 import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
@@ -78,7 +79,7 @@ const payable = items
   center={center}
   active="donations"
 >
-  <form method="post" class={`${cardClass} space-y-5`}>
+  <form method="post" id="add-donation" data-guard class={`${cardClass} space-y-5`}>
     <div>
       <h2 class="text-xl font-bold text-ink">Añadir una donación recibida fuera de la web</h2>
       <p class="mt-1 text-base text-muted">Se suma al total del artículo que elijas, igual que una donación de PayPal.</p>
@@ -138,7 +139,22 @@ const payable = items
       {total} {total === 1 ? 'donación' : 'donaciones'}{itemFilter ? ' de este artículo' : ''}, {formatEuro(activeSum)} en total sin contar las anuladas.
     </p>
     {donations.length === 0 ? (
-      <p class="text-base text-muted">{itemFilter ? 'Este artículo no tiene donaciones.' : 'Todavía no hay donaciones. Cuando alguien done, aparecerá aquí.'}</p>
+      itemFilter ? (
+        <EmptyState
+          title="Este artículo no tiene donaciones"
+          text="Todavía nadie ha donado para este artículo."
+          actionLabel="Ver todas las donaciones"
+          actionHref={here}
+          secondary
+        />
+      ) : (
+        <EmptyState
+          title="Todavía no hay donaciones"
+          text="Las de PayPal aparecerán aquí solas. Si has recibido dinero de otra forma, apúntalo a mano."
+          actionLabel={payable.length > 0 ? 'Apuntar una donación' : 'Ver los artículos'}
+          actionHref={payable.length > 0 ? '#add-donation' : `/${center.slug}/admin/items`}
+        />
+      )
     ) : (
       <table class={tableClass}>
         <thead>

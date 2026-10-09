@@ -1,5 +1,6 @@
 import sql from '../db';
 import { discardBlobs } from './blobs';
+import { END_OF_LIST } from '../admin/forms';
 import { sortForPublic, toWishlistItem } from '../items';
 import type { AdminItem, DBItemImage, ItemInput, ItemRow, WishlistItem } from '../../types/database';
 
@@ -111,6 +112,93 @@ async function placeItem(centerId: string, itemId: string, position: number): Pr
     FROM final
     WHERE items.id = final.id AND items.center_id = ${centerId}
   `;
+}
+
+export const MAX_BATCH_ITEMS = 200;
+
+async function compactPositions(centerId: string): Promise<void> {
+  await sql`
+    WITH ranked AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, created_at ASC, id ASC) AS pos
+      FROM items WHERE center_id = ${centerId} AND status <> 'archived'
+    )
+    UPDATE items SET sort_order = ranked.pos::int
+    FROM ranked
+    WHERE items.id = ranked.id AND items.sort_order <> ranked.pos::int
+  `;
+}
+
+export async function reorderItems(centerId: string, orderedIds: string[]): Promise<number> {
+  const rows = await sql`
+    WITH given AS (
+      SELECT DISTINCT ON (t.id) t.id, t.ord
+      FROM unnest(${orderedIds}::uuid[]) WITH ORDINALITY AS t(id, ord)
+      ORDER BY t.id, t.ord
+    ),
+    listed AS (
+      SELECT g.id, ROW_NUMBER() OVER (ORDER BY g.ord ASC) AS ord
+      FROM given g JOIN items i ON i.id = g.id
+      WHERE i.center_id = ${centerId} AND i.status <> 'archived'
+    ),
+    unlisted AS (
+      SELECT i.id, (SELECT COUNT(*) FROM listed) + ROW_NUMBER() OVER (ORDER BY i.sort_order ASC, i.created_at ASC, i.id ASC) AS ord
+      FROM items i
+      WHERE i.center_id = ${centerId} AND i.status <> 'archived' AND i.id NOT IN (SELECT id FROM listed)
+    ),
+    final AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY ord ASC) AS pos
+      FROM (SELECT id, ord FROM listed UNION ALL SELECT id, ord FROM unlisted) merged
+    )
+    UPDATE items SET sort_order = final.pos::int
+    FROM final
+    WHERE items.id = final.id AND items.center_id = ${centerId}
+    RETURNING items.id
+  `;
+  return rows.length;
+}
+
+export type BatchAction = 'archive' | 'show' | 'hide';
+
+export async function setItemsStatus(centerId: string, itemIds: string[], action: BatchAction): Promise<number> {
+  const rows = await sql`
+    UPDATE items SET
+      status = CASE WHEN ${action}::text = 'archive' THEN 'archived' WHEN ${action}::text = 'show' THEN 'active' ELSE 'draft' END::item_status,
+      updated_at = NOW()
+    WHERE center_id = ${centerId}
+      AND id = ANY(${itemIds}::uuid[])
+      AND CASE
+        WHEN ${action}::text = 'archive' THEN status <> 'archived'
+        WHEN ${action}::text = 'show' THEN status IN ('draft', 'archived')
+        ELSE status IN ('active', 'funded')
+      END
+    RETURNING id
+  `;
+  if (rows.length > 0) await compactPositions(centerId);
+  return rows.length;
+}
+
+export async function duplicateItem(centerId: string, itemId: string): Promise<string | null> {
+  const rows = await sql`
+    WITH src AS (
+      SELECT id, name, description, goal_amount FROM items WHERE id = ${itemId} AND center_id = ${centerId}
+    ),
+    copy AS (
+      INSERT INTO items (center_id, name, description, goal_amount, status, sort_order)
+      SELECT ${centerId}, LEFT('Copia de ' || name, 120), description, goal_amount, 'draft', 0 FROM src
+      RETURNING id
+    ),
+    imgs AS (
+      INSERT INTO item_images (item_id, image_url, alt_text, sort_order)
+      SELECT copy.id, img.image_url, img.alt_text, img.sort_order
+      FROM copy JOIN src ON TRUE JOIN item_images img ON img.item_id = src.id
+      RETURNING id
+    )
+    SELECT id FROM copy
+  `;
+  if (rows.length === 0) return null;
+  const id = rows[0].id as string;
+  await placeItem(centerId, id, END_OF_LIST);
+  return id;
 }
 
 export async function createItem(centerId: string, input: ItemInput): Promise<string> {

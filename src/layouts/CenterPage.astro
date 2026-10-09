@@ -8,9 +8,10 @@ interface Props {
   title: string;
   primaryColor?: string;
   paypalClientId?: string | null;
+  skipTo?: string;
 }
 
-const { title, primaryColor = '#007986', paypalClientId = null } = Astro.props;
+const { title, primaryColor = '#007986', paypalClientId = null, skipTo = 'contenido' } = Astro.props;
 const color = isHexColor(primaryColor) ? primaryColor : '#007986';
 const hover = darken(color, 0.2);
 ---
@@ -27,6 +28,7 @@ const hover = darken(color, 0.2);
     )}
   </head>
   <body class="antialiased" style={`--primary: ${color}; --primary-hover: ${hover}; --focus: ${color};`}>
+    <a href={`#${skipTo}`} class="sr-only z-50 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink shadow-lift focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Saltar al contenido</a>
     <slot />
     <footer class="border-t border-line">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 text-sm text-muted">

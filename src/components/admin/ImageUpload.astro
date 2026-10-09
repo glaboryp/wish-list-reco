@@ -37,6 +37,10 @@ const inputId = `upload-${name}`;
         </button>
       )}
       <p class="text-sm text-muted">Formatos JPG, PNG o WebP. Máximo 5 MB.</p>
+      <div data-progress hidden class="flex items-center gap-2">
+        <progress data-progress-bar max="100" value="0" aria-label="Progreso de la subida" class="h-2 w-40 overflow-hidden rounded-full accent-brand"></progress>
+        <span data-progress-label class="tabular text-sm font-semibold text-muted" aria-hidden="true">0 %</span>
+      </div>
       <p class="text-sm font-semibold" data-status role="status" hidden></p>
     </div>
   </div>
@@ -54,6 +58,9 @@ const inputId = `upload-${name}`;
     const preview = root.querySelector<HTMLImageElement>('[data-preview]')!;
     const placeholder = root.querySelector<HTMLElement>('[data-placeholder]')!;
     const buttonText = root.querySelector<HTMLElement>('[data-button-text]')!;
+    const progress = root.querySelector<HTMLElement>('[data-progress]')!;
+    const progressBar = root.querySelector<HTMLProgressElement>('[data-progress-bar]')!;
+    const progressLabel = root.querySelector<HTMLElement>('[data-progress-label]')!;
     const removeButton = root.querySelector<HTMLButtonElement>('[data-remove]');
     const removeFlag = root.querySelector<HTMLInputElement>('[data-remove-flag]');
     const slug = root.dataset.slug!;
@@ -68,6 +75,12 @@ const inputId = `upload-${name}`;
       status.hidden = false;
       status.textContent = message;
       status.className = `text-sm font-semibold ${tone === 'error' ? 'text-red-800' : tone === 'ok' ? 'text-green-800' : 'text-muted'}`;
+    };
+
+    const setProgress = (percentage: number) => {
+      const value = Math.max(0, Math.min(100, Math.round(percentage)));
+      progressBar.value = value;
+      progressLabel.textContent = `${value} %`;
     };
 
     removeButton?.addEventListener('click', () => {
@@ -90,6 +103,8 @@ const inputId = `upload-${name}`;
       preview.classList.remove('hidden');
       placeholder.classList.add('hidden');
       show('Subiendo imagen...', 'info');
+      setProgress(0);
+      progress.hidden = false;
       submitButtons().forEach((button) => (button.disabled = true));
 
       try {
@@ -97,6 +112,7 @@ const inputId = `upload-${name}`;
         const blob = await upload(`${slug}/${crypto.randomUUID()}-${safeName}`, selected, {
           access: 'public',
           handleUploadUrl: `/api/${slug}/upload`,
+          onUploadProgress: ({ percentage }) => setProgress(percentage),
         });
         hidden.value = blob.url;
         if (removeFlag) removeFlag.value = '';
@@ -107,6 +123,7 @@ const inputId = `upload-${name}`;
         hidden.value = '';
         show('No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
+        progress.hidden = true;
         syncSubmit();
       }
     });
