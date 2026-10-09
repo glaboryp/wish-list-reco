@@ -112,3 +112,10 @@ export async function listDonations(
     activeSum: parseFloat(totals[0].active_sum),
   };
 }
+
+export async function countCenterDonors(centerId: string): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*) AS donor_count FROM donations WHERE center_id = ${centerId} AND voided_at IS NULL
+  `;
+  return Number(rows[0]?.donor_count ?? 0);
+}

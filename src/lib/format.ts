@@ -9,3 +9,8 @@ const dateTime = new Intl.DateTimeFormat('es-ES', {
 });
 
 export const formatDateTime = (value: Date | string): string => dateTime.format(new Date(value));
+
+export const formatDonorCount = (count: number): string | null => {
+  if (count <= 0) return null;
+  return count === 1 ? '1 persona ha donado' : `${count} personas han donado`;
+};

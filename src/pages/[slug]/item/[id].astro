@@ -4,7 +4,7 @@ import DonationForm from "../../../components/DonationForm.astro";
 import { isUuid } from "../../../lib/ids";
 import { getCenterBySlug } from "../../../lib/repo/centers";
 import Icon from "../../../components/Icon.astro";
-import { formatEuro } from "../../../lib/format";
+import { formatDonorCount, formatEuro } from "../../../lib/format";
 import { getItemImages, getPublicItem } from "../../../lib/repo/items";
 
 const { slug, id } = Astro.params;
@@ -25,6 +25,7 @@ if (!item) {
 const images = await getItemImages(item.id);
 const progress = Math.min(100, Math.round((item.raised / item.goal) * 100));
 const isFunded = item.status === 'funded';
+const donors = formatDonorCount(item.donorCount);
 const remaining = Math.max(0, item.goal - item.raised);
 const maxDonation = Math.ceil(remaining);
 const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_client_id : null;
@@ -83,6 +84,7 @@ const paypalClientId = center.paypal_configured && !isFunded ? center.paypal_cli
             <span class="text-muted"> de {formatEuro(item.goal)}</span>
           </p>
           {!isFunded && <p class="tabular text-base text-muted">Faltan {formatEuro(remaining)} para completarlo.</p>}
+          {donors && <p data-donor-count class="text-base text-muted">{donors}</p>}
         </div>
 
         {isFunded ? (
