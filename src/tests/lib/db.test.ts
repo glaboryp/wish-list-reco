@@ -6,6 +6,7 @@ const { mockNeon } = vi.hoisted(() => ({
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: mockNeon,
+  neonConfig: {},
 }));
 
 describe('database client configuration', () => {
