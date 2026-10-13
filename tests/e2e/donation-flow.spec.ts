@@ -50,7 +50,55 @@ test('Legacy item URLs redirect to the Recoletos center', async ({ request }) =>
     expect(response.headers()['location']).toBe('/recoletos/item/33333333-3333-4333-8333-333333333333');
 });
 
-test('A non-uuid item id does not crash the page', async ({ request }) => {
+test('A non-uuid item id shows the not-found page', async ({ request }) => {
     const response = await request.get('/recoletos/item/abc', { maxRedirects: 0 });
-    expect(response.status()).toBe(302);
+    expect(response.status()).toBe(404);
+});
+
+test('An unknown item shows a message with a link back to the center', async ({ page }) => {
+    const response = await page.goto('/recoletos/item/99999999-9999-4999-8999-999999999999');
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { name: 'No encontramos este artículo' })).toBeVisible();
+    await page.getByRole('link', { name: /Ver la lista de Recoletos/ }).click();
+    await expect(page).toHaveURL(/\/recoletos#wishlist$/);
+});
+
+test('An unknown center shows a styled message with a link to the centers', async ({ page }) => {
+    const response = await page.goto('/no-existe');
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { name: 'No encontramos este centro' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ver los centros' })).toHaveAttribute('href', '/');
+});
+
+test('Item page exposes share metadata', async ({ page, request }) => {
+    await page.goto('/recoletos');
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+    await expect(page).toHaveURL(/\/recoletos\/item\//);
+
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Cáliz - Recoletos/);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', /25,00 € de 100,00 €/);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^http:\/\/localhost:\d+\/.+\.webp$/);
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/recoletos\/item\//);
+    await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /initial-scale=1/);
+
+    await page.getByRole('button', { name: 'Compartir', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', /^https:\/\/wa\.me\/\?text=/);
+    await expect(page.getByRole('button', { name: 'Copiar enlace' })).toBeVisible();
+
+    const robots = await request.get('/robots.txt');
+    expect(await robots.text()).toContain('Sitemap:');
+    const sitemap = await request.get('/sitemap.xml');
+    const xml = await sitemap.text();
+    expect(xml).toContain('/recoletos</loc>');
+    expect(xml).toContain('/recoletos/item/');
+});
+
+test('Shows the anonymous donor counter', async ({ page }) => {
+    await page.goto('/recoletos');
+    await expect(page.locator('[data-donor-count]').first()).toHaveText('2 personas han donado');
+    await expect(page.locator('article [data-donor-count]').first()).toHaveText('2 personas han donado');
+
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+    await expect(page.locator('[data-donor-count]')).toHaveText('2 personas han donado');
 });

@@ -1,5 +1,6 @@
 import { credentialsFor, lookupOrder, type CaptureResult, type PayPalCredentials } from './paypal';
 import { getCenterWithSecretById } from './repo/centers';
+import { centsToDecimalString, toCents } from './money';
 import { recordPaypalDonation } from './repo/donations';
 import {
   listReconcilableCaptures,
@@ -16,12 +17,12 @@ export type RecordCaptureOutcome = 'created' | 'duplicate' | 'item_not_found' | 
 export async function recordCapture(centerId: string, capture: CaptureResult): Promise<RecordCaptureOutcome> {
   if (capture.currency !== 'EUR') return 'unsupported_currency';
   const creditedAmount = capture.donationAmount ?? capture.amount;
-  const feeCents = Math.round(parseFloat(capture.amount) * 100) - Math.round(parseFloat(creditedAmount) * 100);
+  const feeCents = toCents(capture.amount) - toCents(creditedAmount);
   return recordPaypalDonation({
     centerId,
     itemId: capture.itemId,
     amount: creditedAmount,
-    feeAmount: (feeCents / 100).toFixed(2),
+    feeAmount: centsToDecimalString(feeCents),
     currency: capture.currency,
     captureId: capture.captureId,
   });

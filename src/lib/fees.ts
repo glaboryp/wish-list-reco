@@ -1,3 +1,5 @@
+import { fromCents, toCents } from './money';
+
 export type PaymentSource = 'paypal' | 'card';
 
 export interface FeeRate {
@@ -37,5 +39,5 @@ export function feeScheduleFromRow(row: Record<string, unknown>): FeeSchedule {
 
 export function amountWithFees(net: number, source: PaymentSource, schedule: FeeSchedule = DEFAULT_FEE_SCHEDULE): number {
   const { rate, fixed } = schedule[source];
-  return Math.round(((net + fixed) / (1 - rate)) * 100) / 100;
+  return fromCents(Math.round((toCents(net) + toCents(fixed)) / (1 - rate)));
 }
