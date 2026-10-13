@@ -1,5 +1,6 @@
 ---
 import Icon from "./Icon.astro";
+import ShareButton from "./ShareButton.astro";
 import { DEFAULT_FEE_SCHEDULE, type FeeSchedule } from "../lib/fees";
 import { paypalSdkUrl } from "../lib/paypal-sdk";
 
@@ -118,6 +119,7 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
   </div>
   <h3 class="text-2xl font-bold text-ink">¡Gracias por tu donación!</h3>
   <p class="text-base text-ink/90">Tu aportación a «{itemName}» ya cuenta y {centerName} te lo agradece de corazón.</p>
+  <ShareButton url={`${Astro.url.origin}/${slug}/item/${itemId}`} text={`${itemName} - ${centerName}`} label="Compartir para que otros ayuden" />
   <div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
     <button type="button" data-reload class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 text-base font-semibold text-white" style="background-color: var(--primary);">
       Ver el artículo actualizado
