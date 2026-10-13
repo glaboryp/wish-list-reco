@@ -1,9 +1,11 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { formatDateTime } from "../../lib/format";
 import Icon from "../../components/Icon.astro";
 import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../components/admin/ui";
 import { parseNewCenter } from "../../lib/admin/forms";
 import { guardSuperadmin } from "../../lib/auth/guard";
+import { recordAudit, listAccountAudit } from "../../lib/repo/audit";
 import { createCenter, listCenters } from "../../lib/repo/centers";
 import { listUnresolvedCaptures } from "../../lib/repo/pending-captures";
 
@@ -16,10 +18,18 @@ if (Astro.request.method === 'POST') {
   if (!parsed.ok) return Astro.redirect(`/admin?error=${encodeURIComponent(parsed.error)}`, 303);
   const created = await createCenter(parsed.value);
   if (!created) return Astro.redirect(`/admin?error=${encodeURIComponent('Ya existe un centro con ese identificador')}`, 303);
+  await recordAudit({
+    centerId: created.id,
+    actorEmail: actor.email,
+    action: 'center.create',
+    entityType: 'center',
+    entityId: created.id,
+    summary: `Centro creado: ${created.name}`,
+  });
   return Astro.redirect(`/admin/centers/${created.slug}?ok=center-created`, 303);
 }
 
-const [centers, unresolved] = await Promise.all([listCenters(), listUnresolvedCaptures()]);
+const [centers, unresolved, accountAudit] = await Promise.all([listCenters(), listUnresolvedCaptures(), listAccountAudit()]);
 const centerNames = new Map(centers.map((center) => [center.id, center.name]));
 const host = Astro.url.host;
 ---
@@ -124,4 +134,29 @@ const host = Astro.url.host;
       <button type="submit" class={buttonClass}>Crear centro</button>
     </div>
   </form>
+
+  {accountAudit.length > 0 && (
+    <section class={`${cardClass} space-y-3`} data-testid="account-activity" aria-labelledby="account-activity-title">
+      <h2 id="account-activity-title" class="text-xl font-bold text-ink">Actividad de cuentas</h2>
+      <p class="text-base text-muted">Cambios que no pertenecen a un centro concreto, como cerrar la sesión en todos los dispositivos. Las 20 más recientes.</p>
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th class={thClass}>Fecha</th>
+            <th class={thClass}>Quién</th>
+            <th class={thClass}>Qué</th>
+          </tr>
+        </thead>
+        <tbody>
+          {accountAudit.map((entry) => (
+            <tr>
+              <td class={`${tdClass} tabular`} data-label="Fecha">{formatDateTime(entry.created_at)}</td>
+              <td class={tdClass} data-label="Quién">{entry.actor_email}</td>
+              <td class={tdClass} data-label="Qué">{entry.summary}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )}
 </AdminLayout>

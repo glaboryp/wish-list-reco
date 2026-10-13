@@ -50,7 +50,7 @@ const inputId = `upload-${name}`;
 
 <script>
   import { upload } from '@vercel/blob/client';
-  import { optimizeImage } from '../../lib/image-resize';
+  import { ImageTooLargeError, optimizeImage } from '../../lib/image-resize';
 
   document.querySelectorAll<HTMLElement>('[data-upload]').forEach((root) => {
     const file = root.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -131,8 +131,12 @@ const inputId = `upload-${name}`;
         if (removeButton) removeButton.hidden = false;
         buttonText.textContent = 'Cambiar imagen';
         show('Imagen lista. Pulsa el botón de guardar para aplicarla.', 'ok');
-      } catch {
+      } catch (error) {
         hidden.value = '';
+        if (error instanceof ImageTooLargeError) {
+          show('La imagen pesa más de 5 MB y no hemos podido reducirla. Prueba con otra más pequeña o en otro formato (JPG, PNG o WebP).', 'error');
+          return;
+        }
         show(limitedMessage || 'No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
         window.fetch = nativeFetch;

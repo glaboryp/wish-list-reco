@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { mockSql } = vi.hoisted(() => ({ mockSql: vi.fn() }));
 vi.mock('../../lib/db', () => ({ default: mockSql }));
 
-import { AUDIT_PAGE_SIZE, listAudit, recordAudit } from '../../lib/repo/audit';
+import { ACCOUNT_AUDIT_LIMIT, AUDIT_PAGE_SIZE, listAccountAudit, listAudit, recordAudit } from '../../lib/repo/audit';
 import { bumpSessionVersion, getSessionVersion } from '../../lib/repo/sessions';
 
 const entry = { centerId: 'c1', actorEmail: 'ana@example.org', action: 'item.update', entityType: 'item', summary: 'x' };
@@ -33,6 +33,16 @@ describe('listAudit', () => {
     const result = await listAudit('c1', 2);
     expect(result).toEqual({ rows: [{ id: 'a' }], total: 75 });
     expect(mockSql.mock.calls[0].slice(1)).toEqual(['c1', AUDIT_PAGE_SIZE, AUDIT_PAGE_SIZE]);
+  });
+});
+
+describe('listAccountAudit', () => {
+  it('reads the latest center-less entries', async () => {
+    mockSql.mockResolvedValueOnce([{ id: 'a' }]);
+    expect(await listAccountAudit()).toEqual([{ id: 'a' }]);
+    expect(mockSql.mock.calls[0][0].join('?')).toContain('center_id IS NULL');
+    expect(mockSql.mock.calls[0].slice(1)).toEqual([ACCOUNT_AUDIT_LIMIT]);
+    expect(ACCOUNT_AUDIT_LIMIT).toBe(20);
   });
 });
 

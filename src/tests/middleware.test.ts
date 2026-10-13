@@ -17,6 +17,13 @@ describe('middleware', () => {
     expect(csp).toContain('https://*.vercel-storage.com');
   });
 
+  it('allows blob: previews only for images', async () => {
+    const csp = (await run(new Request('https://wish-list.vercel.app/'))).headers.get('Content-Security-Policy') ?? '';
+    const directives = Object.fromEntries(csp.split(';').map((part) => part.trim()).filter(Boolean).map((part) => [part.split(' ')[0], part]));
+    expect(directives['img-src']).toContain('blob:');
+    expect(csp.match(/blob:/g)).toHaveLength(1);
+  });
+
   it('redirects GET requests on the legacy domain without running the app', async () => {
     let reachedApp = false;
     const response = await (onRequest as any)(

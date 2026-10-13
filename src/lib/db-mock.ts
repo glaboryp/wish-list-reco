@@ -46,6 +46,10 @@ const auditRows = [
   { id: '66666666-6666-4666-8666-666666666661', center_id: RECOLETOS_ID, actor_email: 'second@example.org', action: 'appearance.update', entity_type: 'center', entity_id: RECOLETOS_ID, summary: 'Apariencia actualizada', created_at: '2026-10-01T10:00:00Z' },
 ];
 
+const accountAuditRows = [
+  { id: '66666666-6666-4666-8666-666666666663', center_id: null, actor_email: MANAGER_EMAIL, action: 'session.revoke_all', entity_type: 'session', entity_id: null, summary: 'Sesión cerrada en todos los dispositivos', created_at: '2026-10-03T10:00:00Z' },
+];
+
 const nearlyDoneItem = {
   ...item,
   id: '33333333-3333-4333-8333-333333333334',
@@ -76,6 +80,7 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     return text.includes('INSERT') || sessionVersions.has(email) ? [{ session_version: sessionVersions.get(email) ?? 0 }] : [];
   }
   if (text.includes('INSERT INTO audit_log')) return [];
+  if (text.includes('FROM audit_log WHERE center_id IS NULL')) return accountAuditRows;
   if (text.includes('FROM audit_log')) {
     if (text.includes('COUNT(*)')) return [{ total: has(RECOLETOS_ID) ? '2' : '0' }];
     return has(RECOLETOS_ID) ? auditRows : [];

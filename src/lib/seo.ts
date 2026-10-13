@@ -1,4 +1,5 @@
 import { formatEuro } from './format';
+import { isUuid } from './ids';
 import type { WishlistItem } from '../types/database';
 
 export interface PageMeta {
@@ -30,6 +31,12 @@ export function absoluteUrl(value: string | null | undefined, origin: string): s
   }
 }
 
+export function normalizePath(path: string): string {
+  const pathname = path.split(/[?#]/)[0] || '/';
+  const trimmed = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return (trimmed || '/').replace(/(\/item\/)([^/]+)$/, (_, prefix: string, id: string) => `${prefix}${isUuid(id) ? id.toLowerCase() : id}`);
+}
+
 export function buildItemMeta(input: {
   item: Pick<WishlistItem, 'name' | 'description' | 'goal' | 'raised'>;
   centerName: string;
@@ -43,7 +50,7 @@ export function buildItemMeta(input: {
   return {
     title: `${item.name} - ${centerName}`,
     description: truncate(`${lead}${progress} reunidos para ${centerName}.`, 200),
-    canonical: new URL(path, origin).href,
+    canonical: new URL(normalizePath(path), origin).href,
     image: absoluteUrl(image, origin),
   };
 }
@@ -61,7 +68,7 @@ export function buildCenterMeta(input: {
   return {
     title: `${name} - Lista de deseos`,
     description: truncate(heroText || heroTitle || `Lista de deseos de ${name}`, 200),
-    canonical: new URL(path, origin).href,
+    canonical: new URL(normalizePath(path), origin).href,
     image: absoluteUrl(heroImage ?? logo, origin),
   };
 }

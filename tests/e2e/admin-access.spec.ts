@@ -62,6 +62,14 @@ test.describe('admin access control', () => {
         expect((await page.goto('/otro/admin'))?.status()).toBe(200);
     });
 
+    test('the superadmin sees center-less account activity', async ({ page, context }) => {
+        await signIn(context, 'boss@example.org');
+        await page.goto('/admin');
+        const section = page.getByTestId('account-activity');
+        await expect(section.getByRole('heading', { name: 'Actividad de cuentas' })).toBeVisible();
+        await expect(section).toContainText('Sesión cerrada en todos los dispositivos');
+    });
+
     test('cross-origin writes are blocked', async ({ request }) => {
         const response = await request.post('/api/auth/logout', {
             headers: { origin: 'https://evil.example.com' },
@@ -316,5 +324,23 @@ test.describe('donations CSV export', () => {
         const item = '33333333-3333-4333-8333-333333333333';
         await page.goto(`/recoletos/admin/donations?item=${item}`);
         await expect(page.getByRole('link', { name: 'Exportar CSV' })).toHaveAttribute('href', `/recoletos/admin/donations.csv?item=${item}`);
+    });
+});
+
+test.describe('canonical urls', () => {
+    const ID = '33333333-3333-4333-8333-333333333333';
+
+    test('path variants redirect to the normalized url and the CSP allows blob previews', async ({ request }) => {
+        const slash = await request.get('/recoletos/', { maxRedirects: 0 });
+        expect(slash.status()).toBe(301);
+        expect(slash.headers()['location']).toBe('/recoletos');
+
+        const upper = await request.get(`/recoletos/item/${ID.toUpperCase()}/?ref=x`, { maxRedirects: 0 });
+        expect(upper.status()).toBe(301);
+        expect(upper.headers()['location']).toBe(`/recoletos/item/${ID}?ref=x`);
+
+        const page = await request.get(`/recoletos/item/${ID}`);
+        expect(page.headers()['content-security-policy']).toContain('img-src \'self\' https: data: blob:');
+        expect(await page.text()).toContain(`rel="canonical" href="${new URL(`/recoletos/item/${ID}`, page.url()).href}"`);
     });
 });
