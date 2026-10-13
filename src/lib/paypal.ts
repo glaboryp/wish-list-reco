@@ -166,3 +166,18 @@ export async function lookupOrder(credentials: PayPalCredentials, orderId: strin
   if (data.status !== 'COMPLETED') return { state: 'not_completed', status: String(data.status) };
   return { state: 'completed', capture: completedCapture(data) };
 }
+
+export type CaptureRefundState = 'refunded' | 'partially_refunded' | 'not_refunded' | 'not_found';
+
+export async function lookupCaptureRefund(credentials: PayPalCredentials, captureId: string): Promise<CaptureRefundState> {
+  const token = await accessToken(credentials);
+  const res = await fetch(`${apiBase(credentials.env)}/v2/payments/captures/${encodeURIComponent(captureId)}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (res.status === 404) return 'not_found';
+  const data = await safeJson(res);
+  if (!res.ok) throw new PayPalError('capture lookup failed', res.status);
+  if (data.status === 'REFUNDED') return 'refunded';
+  if (data.status === 'PARTIALLY_REFUNDED') return 'partially_refunded';
+  return 'not_refunded';
+}
