@@ -8,6 +8,7 @@ import {
   parseItem,
   parseManualDonation,
   parseNewCenter,
+  parseNotifySettings,
   parsePaypal,
   parseVoidDonation,
 } from '../../lib/admin/forms';
@@ -241,5 +242,17 @@ describe('parseVoidDonation', () => {
     { donation_id: UUID, reason: 'x'.repeat(201) },
   ])('rejects %j', (fields) => {
     expect(parseVoidDonation(form(fields)).ok).toBe(false);
+  });
+});
+
+describe('parseNotifySettings', () => {
+  it('accepts each and none', () => {
+    expect(parseNotifySettings(form({ notify_mode: 'each' }))).toEqual({ ok: true, value: { mode: 'each' } });
+    expect(parseNotifySettings(form({ notify_mode: 'none' }))).toEqual({ ok: true, value: { mode: 'none' } });
+  });
+
+  it('rejects anything else, including the not yet implemented daily mode', () => {
+    expect(parseNotifySettings(form({ notify_mode: 'daily' })).ok).toBe(false);
+    expect(parseNotifySettings(form({})).ok).toBe(false);
   });
 });

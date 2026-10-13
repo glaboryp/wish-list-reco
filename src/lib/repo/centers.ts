@@ -7,6 +7,7 @@ import type {
   CenterStatus,
   CenterWithSecret,
   FeeSettingsInput,
+  NotifySettingsInput,
   PayPalSettingsInput,
 } from '../../types/database';
 
@@ -42,9 +43,22 @@ export async function getCenterBySlug(slug: string): Promise<Center | null> {
 }
 
 export async function getCenterWithSecret(slug: string): Promise<CenterWithSecret | null> {
-  const rows = await sql`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sql<{ paypal_secret_encrypted: string | null }>`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
   if (rows.length === 0) return null;
   return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
+}
+
+export async function getCenterWithSecretById(id: string): Promise<CenterWithSecret | null> {
+  const rows = await sql`SELECT * FROM centers WHERE id = ${id} LIMIT 1`;
+  if (rows.length === 0) return null;
+  return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted as string | null };
+}
+
+export async function listCentersWithPaypal(): Promise<CenterWithSecret[]> {
+  const rows = await sql`
+    SELECT * FROM centers WHERE paypal_client_id IS NOT NULL AND paypal_secret_encrypted IS NOT NULL ORDER BY name ASC
+  `;
+  return rows.map((row: any) => ({ ...toCenter(row), paypal_secret_encrypted: row.paypal_secret_encrypted }));
 }
 
 export async function createCenter(input: { slug: string; name: string }): Promise<Center | null> {
@@ -58,7 +72,7 @@ export async function createCenter(input: { slug: string; name: string }): Promi
 }
 
 export async function updateAppearance(centerId: string, input: AppearanceInput): Promise<void> {
-  const rows = await sql`
+  const rows = await sql<{ old_hero: string | null; old_logo: string | null }>`
     WITH old AS (SELECT hero_image_url, logo_url FROM centers WHERE id = ${centerId})
     UPDATE centers SET
       name = ${input.name},
@@ -88,6 +102,10 @@ export async function updateFeeSettings(centerId: string, input: FeeSettingsInpu
       updated_at = NOW()
     WHERE id = ${centerId}
   `;
+}
+
+export async function updateNotifySettings(centerId: string, input: NotifySettingsInput): Promise<void> {
+  await sql`UPDATE centers SET notify_mode = ${input.mode}, updated_at = NOW() WHERE id = ${centerId}`;
 }
 
 export async function updatePaypal(centerId: string, input: PayPalSettingsInput): Promise<void> {

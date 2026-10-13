@@ -3,11 +3,11 @@ import { DEFAULT_FEE_SCHEDULE, amountWithFees, parsePaymentSource } from '../../
 import { isUuid } from '../../../../lib/ids';
 import { createOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
+import { recordPendingCapture } from '../../../../lib/repo/pending-captures';
 import { getPublicItem } from '../../../../lib/repo/items';
 import { rateLimitRequest } from '../../../../lib/rate-limit';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+import { json } from '../../../../lib/http';
+import { fromCents, remainingCents } from '../../../../lib/money';
 
 export const POST: APIRoute = async ({ params, request, clientAddress }) => {
   try {
@@ -47,7 +47,7 @@ export const POST: APIRoute = async ({ params, request, clientAddress }) => {
       return json({ error: 'Este artículo ya ha sido financiado' }, 400);
     }
 
-    const remaining = Math.ceil(item.goal - item.raised);
+    const remaining = Math.ceil(fromCents(remainingCents(item.goal, item.raised)));
     if (donationAmount > remaining) {
       return json({ error: `La cantidad supera lo necesario para financiar el artículo (${remaining}€)` }, 400);
     }
@@ -69,6 +69,11 @@ export const POST: APIRoute = async ({ params, request, clientAddress }) => {
       brandName: center.name,
       donationAmount: coverFees ? donationAmount : undefined,
     });
+    try {
+      await recordPendingCapture({ orderId: id, centerId: center.id, itemId, amount: purchaseAmount.toFixed(2) });
+    } catch (error) {
+      console.error('Error guardando la orden pendiente', id, error);
+    }
     return json({ id });
   } catch (error) {
     console.error('Error creando orden PayPal', error);

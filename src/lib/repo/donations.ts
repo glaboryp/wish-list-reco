@@ -1,5 +1,6 @@
 import sql from '../db';
-import type { DonationRow } from '../../types/database';
+import { listAdminItems } from './items';
+import type { AdminItem, DonationRow } from '../../types/database';
 
 export async function recordPaypalDonation(input: {
   centerId: string;
@@ -19,6 +20,19 @@ export async function recordPaypalDonation(input: {
   if (inserted.length > 0) return 'created';
   const existing = await sql`SELECT 1 AS ok FROM donations WHERE paypal_capture_id = ${input.captureId}`;
   return existing.length > 0 ? 'duplicate' : 'item_not_found';
+}
+
+export async function getDonationSummary(
+  centerId: string,
+  itemId: string,
+): Promise<{ name: string; goal: number; raised: number } | null> {
+  const rows = await sql<{ name: string; goal_amount: string; raised: string }>`
+    SELECT i.name, i.goal_amount,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised
+    FROM items i WHERE i.id = ${itemId} AND i.center_id = ${centerId}
+  `;
+  if (rows.length === 0) return null;
+  return { name: rows[0].name, goal: parseFloat(rows[0].goal_amount), raised: parseFloat(rows[0].raised) };
 }
 
 export type ManualDonationResult =
@@ -42,7 +56,7 @@ export async function addManualDonation(input: {
   `;
   if (rows.length > 0) return { status: 'created' };
 
-  const item = await sql`
+  const item = await sql<{ remaining: string }>`
     SELECT GREATEST(i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0), 0) AS remaining
     FROM items i WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
   `;
@@ -62,7 +76,7 @@ export async function voidManualDonation(centerId: string, donationId: string): 
 export async function voidPaypalDonation(
   centerId: string,
   donationId: string,
-  input: { reason: string; actorEmail: string },
+  input: { reason: string; actorEmail: string | null },
 ): Promise<'voided' | 'already_voided' | 'missing'> {
   const rows = await sql`
     UPDATE donations SET voided_at = NOW(), voided_by = ${input.actorEmail}, void_reason = ${input.reason}
@@ -74,6 +88,21 @@ export async function voidPaypalDonation(
     SELECT 1 AS ok FROM donations WHERE id = ${donationId} AND center_id = ${centerId} AND source = 'paypal'
   `;
   return existing.length > 0 ? 'already_voided' : 'missing';
+}
+
+export interface LivePaypalDonation {
+  id: string;
+  paypal_capture_id: string;
+}
+
+export async function listLivePaypalDonations(centerId: string, sinceDays: number, limit: number): Promise<LivePaypalDonation[]> {
+  return sql<LivePaypalDonation>`
+    SELECT id, paypal_capture_id FROM donations
+    WHERE center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
+      AND created_at > NOW() - make_interval(days => ${sinceDays}::int)
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}
+  `;
 }
 
 export const DONATIONS_PAGE_SIZE = 50;
@@ -93,22 +122,55 @@ export async function listDonations(
   const offset = (Math.max(1, options.page ?? 1) - 1) * pageSize;
 
   const [rows, totals] = await Promise.all([
-    sql`
+    sql<DonationRow>`
       SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
       FROM donations d JOIN items i ON i.id = d.item_id
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
       ORDER BY d.created_at DESC, d.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `,
-    sql`
+    sql<{ total: string; active_sum: string }>`
       SELECT COUNT(*) AS total, COALESCE(SUM(d.amount) FILTER (WHERE d.voided_at IS NULL), 0) AS active_sum
       FROM donations d
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
     `,
   ]);
   return {
-    rows: rows as DonationRow[],
+    rows,
     total: Number(totals[0].total),
     activeSum: parseFloat(totals[0].active_sum),
   };
+}
+
+export async function listAllDonations(centerId: string, itemId: string | null = null): Promise<DonationRow[]> {
+  return sql<DonationRow>`
+    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
+    FROM donations d JOIN items i ON i.id = d.item_id
+    WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
+    ORDER BY d.created_at DESC, d.id DESC
+  `;
+}
+
+export const RECENT_DONATIONS_LIMIT = 5;
+
+export interface DashboardData {
+  netRaised: number;
+  donationCount: number;
+  recent: DonationRow[];
+  items: AdminItem[];
+}
+
+export async function getDashboard(centerId: string): Promise<DashboardData> {
+  const [page, items] = await Promise.all([
+    listDonations(centerId, { page: 1, pageSize: RECENT_DONATIONS_LIMIT }),
+    listAdminItems(centerId),
+  ]);
+  return { netRaised: page.activeSum, donationCount: page.total, recent: page.rows, items };
+}
+
+export async function countCenterDonors(centerId: string): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*) AS donor_count FROM donations WHERE center_id = ${centerId} AND voided_at IS NULL
+  `;
+  return Number(rows[0]?.donor_count ?? 0);
 }

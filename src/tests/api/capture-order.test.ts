@@ -1,19 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder } = vi.hoisted(() => ({
+const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder, lookupOrder, resolvePendingCapture, notifyDonation } = vi.hoisted(() => ({
+  notifyDonation: vi.fn(),
   getCenterWithSecret: vi.fn(),
   recordPaypalDonation: vi.fn(),
   credentialsFor: vi.fn(),
   captureOrder: vi.fn(),
+  lookupOrder: vi.fn(),
+  resolvePendingCapture: vi.fn(),
 }));
 
 vi.mock('../../lib/repo/centers', () => ({ getCenterWithSecret }));
 vi.mock('../../lib/repo/donations', () => ({ recordPaypalDonation }));
-vi.mock('../../lib/paypal', () => ({ credentialsFor, captureOrder }));
+vi.mock('../../lib/email/notify', () => ({ notifyDonation }));
+vi.mock('../../lib/paypal', () => ({ credentialsFor, captureOrder, lookupOrder }));
+vi.mock('../../lib/repo/pending-captures', () => ({ resolvePendingCapture }));
 
 import { POST } from '../../pages/api/[slug]/paypal/capture-order';
 
-const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null };
+const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: 'donor@example.org' };
 const center = { id: 'c1', slug: 'recoletos', status: 'active' };
 
 const call = (body: unknown, slug = 'recoletos') =>
@@ -28,6 +33,8 @@ beforeEach(() => {
   credentialsFor.mockReturnValue({ clientId: 'cid', clientSecret: 's', env: 'sandbox' });
   captureOrder.mockResolvedValue(capture);
   recordPaypalDonation.mockResolvedValue('created');
+  lookupOrder.mockResolvedValue({ state: 'not_found' });
+  resolvePendingCapture.mockResolvedValue(undefined);
 });
 
 describe('POST /api/[slug]/paypal/capture-order', () => {
@@ -72,6 +79,15 @@ describe('POST /api/[slug]/paypal/capture-order', () => {
     expect(recordPaypalDonation).toHaveBeenCalledWith(expect.objectContaining({ amount: '10.00', feeAmount: '0.66' }));
   });
 
+  it('notifies after a new donation with the payer email, and not on duplicates', async () => {
+    await call({ orderID: 'O1' });
+    expect(notifyDonation).toHaveBeenCalledWith({ center, itemId: 'item-1', amount: '12.00', donorEmail: 'donor@example.org' });
+    notifyDonation.mockClear();
+    recordPaypalDonation.mockResolvedValue('duplicate');
+    await call({ orderID: 'O1' });
+    expect(notifyDonation).not.toHaveBeenCalled();
+  });
+
   it('is idempotent when the capture was already recorded', async () => {
     recordPaypalDonation.mockResolvedValue('duplicate');
     const response = await call({ orderID: 'O1' });
@@ -104,5 +120,44 @@ describe('POST /api/[slug]/paypal/capture-order', () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ paymentId: 'CAP1', itemId: 'item-1', amount: '1000' });
     expect(recordPaypalDonation).not.toHaveBeenCalled();
+  });
+
+  it('marks the pending order as recorded after a successful registration', async () => {
+    await call({ orderID: 'O1' });
+    expect(resolvePendingCapture).toHaveBeenCalledWith('O1', 'recorded');
+  });
+
+  it('recovers the donation from PayPal when the capture call fails but the order is completed', async () => {
+    captureOrder.mockRejectedValue(new Error('timeout'));
+    lookupOrder.mockResolvedValue({ state: 'completed', capture });
+    const response = await call({ orderID: 'O1' });
+    expect(response.status).toBe(200);
+    expect(recordPaypalDonation).toHaveBeenCalledWith(expect.objectContaining({ captureId: 'CAP1', amount: '12.00' }));
+    expect(resolvePendingCapture).toHaveBeenCalledWith('O1', 'recorded');
+  });
+
+  it('fails without recording when PayPal says the order was not paid', async () => {
+    captureOrder.mockRejectedValue(new Error('declined'));
+    lookupOrder.mockResolvedValue({ state: 'not_completed', status: 'APPROVED' });
+    expect((await call({ orderID: 'O1' })).status).toBe(500);
+    expect(recordPaypalDonation).not.toHaveBeenCalled();
+  });
+
+  it('fails cleanly when the order lookup itself fails', async () => {
+    captureOrder.mockRejectedValue(new Error('timeout'));
+    lookupOrder.mockRejectedValue(new Error('network'));
+    expect((await call({ orderID: 'O1' })).status).toBe(500);
+  });
+
+  it('keeps the order pending for the reconciler when the database write fails', async () => {
+    recordPaypalDonation.mockRejectedValue(new Error('db down'));
+    await call({ orderID: 'O1' });
+    expect(resolvePendingCapture).not.toHaveBeenCalled();
+  });
+
+  it('flags the order for review when the item does not belong to the center', async () => {
+    recordPaypalDonation.mockResolvedValue('item_not_found');
+    await call({ orderID: 'O1' });
+    expect(resolvePendingCapture).toHaveBeenCalledWith('O1', 'needs_review', 'item_not_found');
   });
 });

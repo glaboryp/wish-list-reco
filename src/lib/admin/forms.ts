@@ -2,7 +2,7 @@ import { isCenterBlobUrl } from '../blob';
 import { isValidPrimaryColor } from '../color';
 import { isUuid } from '../ids';
 import { validateSlug } from '../slug';
-import type { AppearanceInput, FeeSettingsInput, ItemInput, PayPalEnv } from '../../types/database';
+import type { AppearanceInput, FeeSettingsInput, ItemInput, NotifySettingsInput, PayPalEnv } from '../../types/database';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -110,6 +110,23 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
   };
 }
 
+export const BATCH_ACTIONS = ['archive', 'show', 'hide'] as const;
+export type BatchActionName = (typeof BATCH_ACTIONS)[number];
+const MAX_BATCH_IDS = 200;
+
+export function parseItemIds(values: unknown[]): string[] {
+  const ids = values.map((value) => String(value).trim()).filter(isUuid);
+  return [...new Set(ids)].slice(0, MAX_BATCH_IDS);
+}
+
+export function parseBatch(form: FormData): Parsed<{ action: BatchActionName; ids: string[] }> {
+  const action = text(form, 'batch_action');
+  if (!(BATCH_ACTIONS as readonly string[]).includes(action)) return fail('La acción elegida no es válida');
+  const ids = parseItemIds(form.getAll('ids'));
+  if (ids.length === 0) return fail('Marca al menos un artículo');
+  return { ok: true, value: { action: action as BatchActionName, ids } };
+}
+
 export function parseImageUrl(form: FormData, slug: string): Parsed<string> {
   const image = blobField(form, 'image_url', slug);
   if (!image.ok || image.value === null) {
@@ -175,6 +192,12 @@ export function parseFees(form: FormData): Parsed<FeeSettingsInput> {
     return fail('La cuota fija debe ser un importe entre 0 y 5 euros, por ejemplo 0,35');
   }
   return { ok: true, value: { paypalPercent, paypalFixed, cardPercent, cardFixed } };
+}
+
+export function parseNotifySettings(form: FormData): Parsed<NotifySettingsInput> {
+  const mode = text(form, 'notify_mode');
+  if (mode !== 'each' && mode !== 'none') return fail('La opción de avisos elegida no es válida');
+  return { ok: true, value: { mode } };
 }
 
 export function parseNewCenter(form: FormData): Parsed<{ slug: string; name: string }> {

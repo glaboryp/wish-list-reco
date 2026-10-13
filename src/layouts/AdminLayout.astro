@@ -1,6 +1,8 @@
 ---
 import "../styles/global.css";
 import Icon from "../components/Icon.astro";
+import Toasts from "../components/admin/Toasts.astro";
+import UnsavedChangesGuard from "../components/admin/UnsavedChangesGuard.astro";
 import { secondaryButtonClass } from "../components/admin/ui";
 import type { Actor } from "../lib/auth/access";
 import { listMembershipsByEmail } from "../lib/repo/users";
@@ -11,7 +13,7 @@ interface Props {
   intro?: string;
   actor: Actor;
   center?: Center;
-  active?: 'appearance' | 'items' | 'donations' | 'users' | 'centers';
+  active?: 'dashboard' | 'appearance' | 'items' | 'donations' | 'users' | 'centers';
 }
 
 const { title, intro, actor, center, active } = Astro.props;
@@ -20,12 +22,17 @@ const successMessages: Record<string, string> = {
   'item-created': 'Artículo creado. Ya aparece en tu web si está visible.',
   'item-saved': 'Artículo guardado.',
   'item-removed': 'Artículo borrado.',
+  'item-duplicated': 'Artículo duplicado. Está oculto hasta que lo muestres.',
+  'items-archived': 'Artículos archivados.',
+  'items-shown': 'Artículos visibles en tu web.',
+  'items-hidden': 'Artículos ocultos.',
   'image-added': 'Imagen añadida.',
   'image-removed': 'Imagen quitada.',
   'cover-changed': 'Portada cambiada.',
   'donation-added': 'Donación añadida.',
   'donation-voided': 'Donación anulada. Ya no suma en el total.',
   'donation-already-voided': 'Esa donación ya estaba anulada.',
+  'notify-saved': 'Avisos por correo guardados.',
   'user-added': 'Encargada añadida. Ya puede entrar con su cuenta de Google.',
   'user-removed': 'Acceso quitado.',
   'center-created': 'Centro creado.',
@@ -38,7 +45,8 @@ const memberships = actor.isSuperadmin ? [] : await listMembershipsByEmail(actor
 const base = center ? `/${center.slug}/admin` : '/admin';
 const nav = center
   ? [
-      { key: 'appearance', label: 'Apariencia', href: base },
+      { key: 'dashboard', label: 'Resumen', href: base },
+      { key: 'appearance', label: 'Apariencia', href: `${base}/appearance` },
       { key: 'items', label: 'Artículos', href: `${base}/items` },
       { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
       { key: 'users', label: 'Encargadas', href: `${base}/users` },
@@ -55,6 +63,7 @@ const nav = center
     <title>{title} - Panel</title>
   </head>
   <body class="antialiased">
+    <a href="#contenido" class="sr-only z-50 rounded-lg bg-white px-4 py-3 text-base font-semibold text-brand shadow-lift focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Saltar al contenido</a>
     <header class="border-b border-line bg-white">
       <div class="mx-auto max-w-5xl px-4">
         <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4">
@@ -117,36 +126,25 @@ const nav = center
       </div>
     </header>
 
-    <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <main id="contenido" tabindex="-1" class="mx-auto max-w-5xl space-y-6 px-4 py-8 focus:outline-none">
       <div>
         <h1 class="text-2xl font-bold text-ink sm:text-3xl">{title}</h1>
         {intro && <p class="mt-2 max-w-2xl text-base text-muted">{intro}</p>}
       </div>
-      {okMessage && (
-        <div role="status" data-flash class="flex items-start gap-3 rounded-lg bg-green-50 px-4 py-3 text-base text-green-900 ring-1 ring-green-200">
-          <Icon name="check-circle" class="mt-0.5 h-5 w-5 shrink-0" />
-          <p class="flex-1">{okMessage}</p>
-          <button type="button" data-dismiss class="-m-1 rounded p-1 hover:bg-green-100">
-            <span class="sr-only">Cerrar aviso</span>
-            <Icon name="x" class="h-5 w-5" />
-          </button>
-        </div>
-      )}
-      {error && (
-        <div role="alert" class="flex items-start gap-3 rounded-lg bg-red-50 px-4 py-3 text-base text-red-900 ring-1 ring-red-200">
-          <Icon name="warning-circle" class="mt-0.5 h-5 w-5 shrink-0" />
-          <p class="flex-1">{error}</p>
-        </div>
-      )}
       <slot />
     </main>
 
+    <Toasts ok={okMessage} error={error} />
+    <UnsavedChangesGuard />
+
     <script>
-      document.querySelectorAll<HTMLElement>('[data-flash]').forEach((flash) => {
-        flash.querySelector('[data-dismiss]')?.addEventListener('click', () => flash.remove());
-        setTimeout(() => flash.remove(), 8000);
+      const current = document.querySelector<HTMLElement>('nav [aria-current="page"]');
+      if (current?.parentElement) current.parentElement.scrollLeft = current.offsetLeft - (current.parentElement.clientWidth - current.offsetWidth) / 2;
+      document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          if (!confirm(form.dataset.confirm ?? '')) event.preventDefault();
+        });
       });
-      document.querySelector('nav [aria-current="page"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
       document.getElementById('center-switch')?.addEventListener('change', (event) => {
         window.location.assign((event.target as HTMLSelectElement).value);
       });

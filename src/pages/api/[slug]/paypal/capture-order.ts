@@ -1,10 +1,26 @@
 import type { APIRoute } from 'astro';
-import { captureOrder, credentialsFor } from '../../../../lib/paypal';
+import { captureOrder, credentialsFor, lookupOrder, type CaptureResult } from '../../../../lib/paypal';
+import { recordCapture } from '../../../../lib/paypal-reconcile';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
-import { recordPaypalDonation } from '../../../../lib/repo/donations';
+import { notifyDonation } from '../../../../lib/email/notify';
+import { resolvePendingCapture } from '../../../../lib/repo/pending-captures';
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+async function recoverCapture(credentials: Parameters<typeof lookupOrder>[0], orderId: string): Promise<CaptureResult | null> {
+  try {
+    const lookup = await lookupOrder(credentials, orderId);
+    return lookup.state === 'completed' ? lookup.capture : null;
+  } catch (error) {
+    console.error('Error consultando la orden en PayPal', error);
+    return null;
+  }
+}
+
+async function flagForReview(orderId: string, reason: string) {
+  await resolvePendingCapture(orderId, 'needs_review', reason).catch((error) =>
+    console.error('Error marcando captura para revisión', error),
+  );
+}
+import { json } from '../../../../lib/http';
 
 export const POST: APIRoute = async ({ params, request }) => {
   const center = await getCenterWithSecret(params.slug ?? '');
@@ -27,12 +43,14 @@ export const POST: APIRoute = async ({ params, request }) => {
     return json({ error: 'Este centro todavía no acepta donaciones' }, 503);
   }
 
-  let capture;
+  let capture: CaptureResult;
   try {
     capture = await captureOrder(credentials, orderID);
   } catch (error) {
     console.error('Error en captura PayPal', error);
-    return json({ error: 'Fallo al capturar la orden' }, 500);
+    const recovered = await recoverCapture(credentials, orderID);
+    if (!recovered) return json({ error: 'Fallo al capturar la orden' }, 500);
+    capture = recovered;
   }
 
   const failure = {
@@ -42,32 +60,30 @@ export const POST: APIRoute = async ({ params, request }) => {
     amount: capture.amount,
   };
 
-  if (capture.currency !== 'EUR') {
-    console.error('Captura PayPal en divisa no admitida, no registrada', failure, capture.currency);
-    return json(failure, 500);
-  }
-
-  const creditedAmount = capture.donationAmount ?? capture.amount;
-  const feeCents = Math.round(parseFloat(capture.amount) * 100) - Math.round(parseFloat(creditedAmount) * 100);
-
   let outcome;
   try {
-    outcome = await recordPaypalDonation({
-      centerId: center.id,
-      itemId: capture.itemId,
-      amount: creditedAmount,
-      feeAmount: (feeCents / 100).toFixed(2),
-      currency: capture.currency,
-      captureId: capture.captureId,
-    });
+    outcome = await recordCapture(center.id, capture);
   } catch (error) {
     console.error('Error registrando donación', failure, error);
     return json(failure, 500);
   }
 
+  if (outcome === 'unsupported_currency') {
+    console.error('Captura PayPal en divisa no admitida, no registrada', failure, capture.currency);
+    await flagForReview(orderID, outcome);
+    return json(failure, 500);
+  }
   if (outcome === 'item_not_found') {
     console.error('Donación capturada para un artículo que no pertenece al centro', failure);
+    await flagForReview(orderID, outcome);
     return json(failure, 500);
+  }
+  await resolvePendingCapture(orderID, 'recorded').catch((error) => console.error('Error cerrando captura pendiente', error));
+
+  const creditedAmount = capture.donationAmount ?? capture.amount;
+
+  if (outcome === 'created') {
+    await notifyDonation({ center, itemId: capture.itemId, amount: creditedAmount, donorEmail: capture.payerEmail });
   }
 
   return json({
