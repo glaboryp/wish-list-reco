@@ -1,0 +1,52 @@
+---
+interface Props {
+  url: string;
+  text: string;
+  label?: string;
+}
+
+const { url, text, label = 'Compartir' } = Astro.props;
+---
+
+<div data-share data-url={url} data-text={text} class="space-y-2">
+  <button type="button" data-share-trigger class="inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong bg-white px-5 text-base font-semibold text-ink transition-colors hover:bg-surface">
+    {label}
+  </button>
+  <div data-share-fallback class="hidden flex-wrap items-center gap-3">
+    <a data-share-whatsapp target="_blank" rel="noopener" href="#" class="inline-flex min-h-11 items-center rounded-lg px-4 text-base font-semibold text-ink underline underline-offset-4">WhatsApp</a>
+    <button type="button" data-share-copy class="inline-flex min-h-11 items-center rounded-lg px-4 text-base font-semibold text-ink underline underline-offset-4">Copiar enlace</button>
+  </div>
+  <p data-share-status class="text-sm text-muted" role="status"></p>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-share]').forEach((root) => {
+    const url = root.dataset.url ?? location.href;
+    const text = root.dataset.text ?? '';
+    const fallback = root.querySelector<HTMLElement>('[data-share-fallback]')!;
+    const status = root.querySelector<HTMLElement>('[data-share-status]')!;
+    const whatsapp = root.querySelector<HTMLAnchorElement>('[data-share-whatsapp]')!;
+    whatsapp.href = `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`;
+
+    root.querySelector('[data-share-trigger]')!.addEventListener('click', async () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: text, text, url });
+        } catch (error) {
+          if ((error as DOMException).name !== 'AbortError') fallback.classList.replace('hidden', 'flex');
+        }
+        return;
+      }
+      fallback.classList.replace('hidden', 'flex');
+    });
+
+    root.querySelector('[data-share-copy]')!.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        status.textContent = 'Enlace copiado';
+      } catch {
+        status.textContent = url;
+      }
+    });
+  });
+</script>
