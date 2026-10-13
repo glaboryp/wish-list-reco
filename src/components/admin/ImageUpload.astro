@@ -46,6 +46,7 @@ const inputId = `upload-${name}`;
 
 <script>
   import { upload } from '@vercel/blob/client';
+  import { optimizeImage } from '../../lib/image-resize';
 
   document.querySelectorAll<HTMLElement>('[data-upload]').forEach((root) => {
     const file = root.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -86,15 +87,16 @@ const inputId = `upload-${name}`;
       const selected = file.files?.[0];
       if (!selected) return;
 
-      preview.src = URL.createObjectURL(selected);
-      preview.classList.remove('hidden');
-      placeholder.classList.add('hidden');
       show('Subiendo imagen...', 'info');
       submitButtons().forEach((button) => (button.disabled = true));
 
       try {
-        const safeName = selected.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const blob = await upload(`${slug}/${crypto.randomUUID()}-${safeName}`, selected, {
+        const optimized = await optimizeImage(selected);
+        preview.src = URL.createObjectURL(optimized);
+        preview.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        const safeName = optimized.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const blob = await upload(`${slug}/${crypto.randomUUID()}-${safeName}`, optimized, {
           access: 'public',
           handleUploadUrl: `/api/${slug}/upload`,
         });

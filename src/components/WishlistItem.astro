@@ -16,6 +16,9 @@ const href = `/${slug}/item/${item.id}`;
         src={item.imageUrl}
         alt={item.imageAlt || item.name}
         loading="lazy"
+        decoding="async"
+        width="800"
+        height="600"
         class:list={['h-full w-full object-cover transition-transform duration-300 group-hover:scale-105', isFunded && 'opacity-80']}
       />
     ) : (

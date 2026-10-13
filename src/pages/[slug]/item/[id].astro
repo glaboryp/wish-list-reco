@@ -57,7 +57,7 @@ const meta = buildItemMeta({
               class="block aspect-4/3 w-full cursor-zoom-in overflow-hidden rounded-xl bg-surface shadow-card"
               style="touch-action: pan-y;"
             >
-              <img src={images[0].image_url} alt={images[0].alt_text || item.name} class="pointer-events-none h-full w-full select-none object-cover" draggable="false" data-gallery-image />
+              <img src={images[0].image_url} alt={images[0].alt_text || item.name} width="1600" height="1200" fetchpriority="high" decoding="async" class="pointer-events-none h-full w-full select-none object-cover" draggable="false" data-gallery-image />
             </button>
             {images.length > 1 && (
               <ul class="grid grid-cols-4 gap-3">
@@ -70,7 +70,7 @@ const meta = buildItemMeta({
                       aria-label={`Ver imagen ${idx + 1} de ${images.length}`}
                       data-gallery-thumb
                     >
-                      <img src={img.image_url} alt="" class="h-full w-full object-cover" />
+                      <img src={img.image_url} alt="" width="200" height="200" loading="lazy" decoding="async" class="h-full w-full object-cover" />
                     </button>
                   </li>
                 ))}
