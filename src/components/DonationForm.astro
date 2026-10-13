@@ -109,15 +109,67 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
   </p>
 </div>
 
-<div id={`${buttonId}-thanks`} class="hidden space-y-4" role="status">
-  <h3 class="text-xl font-bold text-ink">¡Gracias por tu donación!</h3>
+<div id={`${buttonId}-thanks`} class="thanks relative hidden space-y-4 text-center" role="status">
+  <div class="confetti" aria-hidden="true">
+    {Array.from({ length: 12 }, (_, i) => <span style={`--i: ${i};`}></span>)}
+  </div>
+  <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-white" style="background-color: var(--primary);">
+    <Icon name="heart" class="h-8 w-8" />
+  </div>
+  <h3 class="text-2xl font-bold text-ink">¡Gracias por tu donación!</h3>
   <p class="text-base text-ink/90">Tu aportación a «{itemName}» ya cuenta y {centerName} te lo agradece de corazón.</p>
-  <button type="button" data-reload class="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-base font-semibold text-white" style="background-color: var(--primary);">
-    Ver el artículo actualizado
-  </button>
+  <div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
+    <button type="button" data-reload class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 text-base font-semibold text-white" style="background-color: var(--primary);">
+      Ver el artículo actualizado
+    </button>
+    <a href={`/${slug}#wishlist`} class="inline-flex min-h-12 items-center justify-center rounded-lg border border-line-strong bg-white px-5 text-base font-semibold text-ink hover:bg-surface">
+      Ver otros artículos
+    </a>
+  </div>
 </div>
 
 <style>
+  .thanks {
+    overflow: hidden;
+  }
+
+  .confetti span {
+    position: absolute;
+    top: 0;
+    left: calc(var(--i) * 8.5% + 2%);
+    width: 0.5rem;
+    height: 0.9rem;
+    border-radius: 0.125rem;
+    background: var(--primary);
+    opacity: 0;
+    animation: confetti-fall 2.4s ease-out calc(var(--i) * 90ms) 1 both;
+  }
+
+  .confetti span:nth-child(3n) {
+    background: #f5b301;
+  }
+
+  .confetti span:nth-child(3n + 1) {
+    background: #e4572e;
+  }
+
+  @keyframes confetti-fall {
+    0% {
+      opacity: 1;
+      transform: translateY(-1rem) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(14rem) rotate(320deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .confetti {
+      display: none;
+    }
+  }
+
   .paypal-buttons-container {
     position: relative;
     isolation: isolate;

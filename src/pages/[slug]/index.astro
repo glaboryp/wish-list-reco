@@ -2,6 +2,7 @@
 import CenterPage from "../../layouts/CenterPage.astro";
 import WishlistItem from "../../components/WishlistItem.astro";
 import { formatEuro } from "../../lib/format";
+import { centerNotFoundPage } from "../../lib/error-pages";
 import { getCenterBySlug } from "../../lib/repo/centers";
 import { listPublicItems } from "../../lib/repo/items";
 
@@ -9,7 +10,7 @@ const { slug } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;
 
 if (!center || center.status !== 'active') {
-  return new Response('Centro no encontrado', { status: 404 });
+  return centerNotFoundPage();
 }
 
 const items = await listPublicItems(center.id);
