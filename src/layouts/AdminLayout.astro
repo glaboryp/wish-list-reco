@@ -11,7 +11,7 @@ interface Props {
   intro?: string;
   actor: Actor;
   center?: Center;
-  active?: 'appearance' | 'items' | 'donations' | 'users' | 'centers';
+  active?: 'dashboard' | 'appearance' | 'items' | 'donations' | 'users' | 'centers';
 }
 
 const { title, intro, actor, center, active } = Astro.props;
@@ -38,7 +38,8 @@ const memberships = actor.isSuperadmin ? [] : await listMembershipsByEmail(actor
 const base = center ? `/${center.slug}/admin` : '/admin';
 const nav = center
   ? [
-      { key: 'appearance', label: 'Apariencia', href: base },
+      { key: 'dashboard', label: 'Resumen', href: base },
+      { key: 'appearance', label: 'Apariencia', href: `${base}/appearance` },
       { key: 'items', label: 'Artículos', href: `${base}/items` },
       { key: 'donations', label: 'Donaciones', href: `${base}/donations` },
       { key: 'users', label: 'Encargadas', href: `${base}/users` },

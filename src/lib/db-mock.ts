@@ -38,6 +38,15 @@ const item = {
   alt_text: null,
 };
 
+const nearlyDoneItem = {
+  ...item,
+  id: '33333333-3333-4333-8333-333333333334',
+  name: 'Casulla',
+  goal_amount: '100',
+  raised_amount: '80',
+  sort_order: 1,
+};
+
 const itemImages = ['/favicon.webp', '/oratorio.webp'].map((image_url, sort_order) => ({
   id: `44444444-4444-4444-8444-44444444444${sort_order}`,
   item_id: ITEM_ID,
@@ -105,7 +114,7 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     return [];
   }
   if (text.includes('FROM items')) {
-    return has(RECOLETOS_ID) ? [item] : [];
+    return has(RECOLETOS_ID) ? [item, nearlyDoneItem] : [];
   }
   return [];
 }
