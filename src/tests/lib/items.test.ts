@@ -23,6 +23,11 @@ describe('toWishlistItem', () => {
     expect(toWishlistItem(row())).toMatchObject({ goal: 100, raised: 40, description: '', status: 'active' });
   });
 
+  it('maps the donor count and defaults it to zero', () => {
+    expect(toWishlistItem(row({ donor_count: '3' })).donorCount).toBe(3);
+    expect(toWishlistItem(row()).donorCount).toBe(0);
+  });
+
   it('derives funded when raised reaches the goal', () => {
     expect(toWishlistItem(row({ raised_amount: '100' })).status).toBe('funded');
     expect(toWishlistItem(row({ raised_amount: '120.50' })).status).toBe('funded');

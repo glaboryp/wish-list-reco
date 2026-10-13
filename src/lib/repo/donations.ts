@@ -140,3 +140,10 @@ export async function getDashboard(centerId: string): Promise<DashboardData> {
   ]);
   return { netRaised: page.activeSum, donationCount: page.total, recent: page.rows, items };
 }
+
+export async function countCenterDonors(centerId: string): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*) AS donor_count FROM donations WHERE center_id = ${centerId} AND voided_at IS NULL
+  `;
+  return Number(rows[0]?.donor_count ?? 0);
+}

@@ -132,7 +132,7 @@ const positions = positionOptions(allItems, item.id);
         {images.map((image, index) => (
           <li class="space-y-3 rounded-lg border border-line p-3">
             <div class="aspect-video overflow-hidden rounded-md bg-surface">
-              <img src={image.image_url} alt="" class="h-full w-full object-cover" />
+              <img src={image.image_url} alt="" width="200" height="150" loading="lazy" decoding="async" class="h-full w-full object-cover" />
             </div>
             <div class="flex flex-wrap items-center gap-2">
               {index === 0 ? (
