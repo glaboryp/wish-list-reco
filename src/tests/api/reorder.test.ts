@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { reorderItems, authorizeCenter, getActor } = vi.hoisted(() => ({
+const { reorderItems, authorizeCenter, getActor, recordAudit } = vi.hoisted(() => ({
   reorderItems: vi.fn(),
+  recordAudit: vi.fn(),
   authorizeCenter: vi.fn(),
   getActor: vi.fn(),
 }));
 
 vi.mock('../../lib/repo/items', () => ({ reorderItems }));
 vi.mock('../../lib/auth/access', () => ({ authorizeCenter, getActor }));
+vi.mock('../../lib/repo/audit', () => ({ recordAudit }));
 
 import { POST } from '../../pages/api/[slug]/items/reorder';
 
@@ -24,7 +26,7 @@ const call = (body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   getActor.mockResolvedValue({ email: 'ana@example.org', uid: 'u1', isSuperadmin: false });
-  authorizeCenter.mockResolvedValue({ ok: true, center: { id: 'center-1', slug: 'recoletos' } });
+  authorizeCenter.mockResolvedValue({ ok: true, actor: { email: 'ana@example.org', uid: 'u1', isSuperadmin: false }, center: { id: 'center-1', slug: 'recoletos' } });
   reorderItems.mockResolvedValue(2);
 });
 

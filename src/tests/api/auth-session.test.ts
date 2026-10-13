@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { verifyFirebaseIdToken, listMembershipsByEmail, linkFirebaseUid } = vi.hoisted(() => ({
+const { verifyFirebaseIdToken, listMembershipsByEmail, linkFirebaseUid, getSessionVersion } = vi.hoisted(() => ({
+  getSessionVersion: vi.fn(),
   verifyFirebaseIdToken: vi.fn(),
   listMembershipsByEmail: vi.fn(),
   linkFirebaseUid: vi.fn(),
 }));
 
 vi.mock('../../lib/auth/firebase', () => ({ verifyFirebaseIdToken }));
+vi.mock('../../lib/repo/sessions', () => ({ getSessionVersion }));
 vi.mock('../../lib/repo/users', () => ({ listMembershipsByEmail, linkFirebaseUid }));
 
+import { verifySession } from '../../lib/auth/session';
 import { POST as logout } from '../../pages/api/auth/logout';
 import { POST as createSession } from '../../pages/api/auth/session';
 
@@ -25,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   verifyFirebaseIdToken.mockResolvedValue({ uid: 'u1', email: 'ana@example.org' });
   listMembershipsByEmail.mockResolvedValue([{ slug: 'recoletos', name: 'Recoletos' }]);
+  getSessionVersion.mockResolvedValue(4);
 });
 
 describe('POST /api/auth/session', () => {
@@ -56,6 +60,9 @@ describe('POST /api/auth/session', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ redirect: '/recoletos/admin' });
     expect(linkFirebaseUid).toHaveBeenCalledWith('ana@example.org', 'u1');
+    expect(getSessionVersion).toHaveBeenCalledWith('ana@example.org');
+    const token = cookies.set.mock.calls[0][1] as string;
+    expect(await verifySession(token, 'test-session-secret-test-session-secret')).toMatchObject({ email: 'ana@example.org', sv: 4 });
     expect(cookies.set).toHaveBeenCalledWith(
       'session',
       expect.any(String),

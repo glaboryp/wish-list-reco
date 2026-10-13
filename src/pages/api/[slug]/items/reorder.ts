@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { parseItemIds } from '../../../../lib/admin/forms';
 import { authorizeCenter, getActor } from '../../../../lib/auth/access';
+import { recordAudit } from '../../../../lib/repo/audit';
 import { reorderItems } from '../../../../lib/repo/items';
 
 const json = (body: unknown, status = 200) =>
@@ -22,5 +23,6 @@ export const POST: APIRoute = async ({ request, params, cookies }) => {
   if (ids.length === 0) return json({ error: 'Petición no válida' }, 400);
 
   await reorderItems(access.center.id, ids);
+  await recordAudit({ centerId: access.center.id, actorEmail: access.actor.email, action: 'item.reorder', entityType: 'item', summary: 'Orden de los artículos cambiado' });
   return json({ ok: true });
 };

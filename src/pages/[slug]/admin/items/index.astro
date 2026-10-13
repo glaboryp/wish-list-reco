@@ -8,6 +8,7 @@ import { parseBatch, parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
 import { formatEuro } from "../../../../lib/format";
 import { positionOptions } from "../../../../lib/admin/positions";
+import { recordAudit } from "../../../../lib/repo/audit";
 import { createItem, listAdminItems, setItemsStatus } from "../../../../lib/repo/items";
 
 const guard = await guardCenter(Astro);
@@ -26,12 +27,14 @@ if (Astro.request.method === 'POST') {
     if (!batch.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(batch.error)}`, 303);
     const changed = await setItemsStatus(center.id, batch.value.ids, batch.value.action);
     if (changed === 0) return Astro.redirect(`${here}?error=${encodeURIComponent('Los artículos elegidos ya estaban así, no ha cambiado nada')}`, 303);
+    await recordAudit({ centerId: center.id, actorEmail: actor.email, action: `item.batch_${batch.value.action}`, entityType: 'item', summary: `${changed} artículo(s): ${batch.value.action}` });
     return Astro.redirect(`${here}?ok=${batchOutcome[batch.value.action]}${showArchivedParam}`, 303);
   }
 
   const parsed = parseItem(form, center.slug);
   if (!parsed.ok) return Astro.redirect(`${here}?error=${encodeURIComponent(parsed.error)}`, 303);
-  await createItem(center.id, parsed.value);
+  const itemId = await createItem(center.id, parsed.value);
+  await recordAudit({ centerId: center.id, actorEmail: actor.email, action: 'item.create', entityType: 'item', entityId: itemId, summary: `Artículo creado: ${parsed.value.name}` });
   return Astro.redirect(`${here}?ok=item-created`, 303);
 }
 
