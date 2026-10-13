@@ -1,6 +1,7 @@
 ---
 import Icon from "./Icon.astro";
 import { DEFAULT_FEE_SCHEDULE, type FeeSchedule } from "../lib/fees";
+import { paypalSdkUrl } from "../lib/paypal-sdk";
 
 interface Props {
   itemId: string;
@@ -8,18 +9,29 @@ interface Props {
   slug: string;
   centerName?: string;
   maxDonation: number;
-  isDetailPage?: boolean;
+  paypalClientId: string;
   feeSchedule?: FeeSchedule;
 }
 
-const { itemId, itemName, slug, centerName = 'el centro', maxDonation, isDetailPage = false, feeSchedule = DEFAULT_FEE_SCHEDULE } = Astro.props;
+const { itemId, itemName, slug, centerName = 'el centro', maxDonation, paypalClientId, feeSchedule = DEFAULT_FEE_SCHEDULE } = Astro.props;
 
 const inputId = `amount-${itemId}`;
 const buttonId = `paypal-button-${itemId}`;
 const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
 ---
 
-<div class="flex flex-col gap-4" id={`${buttonId}-form`}>
+<div
+  class="flex flex-col gap-4"
+  id={`${buttonId}-form`}
+  data-donation-form
+  data-button-id={buttonId}
+  data-input-id={inputId}
+  data-item-id={itemId}
+  data-slug={slug}
+  data-max-donation={maxDonation}
+  data-fee-schedule={JSON.stringify(feeSchedule)}
+  data-sdk-url={paypalSdkUrl(paypalClientId)}
+>
   <div>
     <label for={inputId} class="block text-base font-semibold text-ink">¿Cuánto quieres donar? (en euros)</label>
     <p id={`${inputId}-help`} class="mt-1 text-sm text-muted">
@@ -72,8 +84,6 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
   </div>
   <p id={`${inputId}-fees-summary`} class="tabular hidden rounded-lg bg-surface px-3 py-2 text-base text-ink"></p>
 
-  <div id={`${buttonId}-mobile-message`} class="hidden"></div>
-
   <div id={`${buttonId}-loading`} class="hidden py-2 text-center">
     <div class="inline-flex items-center gap-2 text-base font-semibold" style="color: var(--primary);">
       <svg class="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -83,6 +93,10 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
       <span>Cargando el formulario de pago...</span>
     </div>
   </div>
+
+  <p id={`${buttonId}-sdk-error`} role="alert" class="hidden rounded-lg bg-red-50 px-3 py-2 text-base font-semibold text-red-800">
+    No hemos podido cargar PayPal. Revisa tu conexión y recarga la página para intentarlo de nuevo.
+  </p>
 
   <div class="flex flex-col gap-2" id={`${buttonId}-buttons-container`}>
     <div id={`${buttonId}-paypal`} class="touch-manipulation paypal-buttons-container"></div>
@@ -116,7 +130,6 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
     pointer-events: auto !important;
   }
 
-  /* Forzar altura mínima en todos los iframes */
   .paypal-buttons-container iframe[name],
   .paypal-buttons-container iframe[id] {
     min-height: 500px !important;
@@ -124,456 +137,48 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
     max-height: none !important;
   }
 
-  /* En móvil, asegurar altura suficiente para el formulario de tarjeta */
   @media (max-width: 767px) {
     .paypal-buttons-container iframe[name],
     .paypal-buttons-container iframe[id] {
       min-height: 700px !important;
     }
   }
+
+  /*
+   * The card form opens inside the button's own container and PayPal keeps
+   * resetting its height, so on small screens we pin a minimum height with
+   * !important once the card button is clicked (the script sets data-expanded).
+   */
+  .paypal-buttons-container[data-expanded] :global(.paypal-buttons) {
+    min-height: 770px !important;
+  }
+
+  @media (max-width: 499px) {
+    .paypal-buttons-container[data-expanded] :global(.paypal-buttons) {
+      min-height: 820px !important;
+    }
+  }
+
+  @media (max-width: 399px) {
+    .paypal-buttons-container[data-expanded] :global(.paypal-buttons) {
+      min-height: 870px !important;
+    }
+  }
 </style>
 
-<script
-  define:vars={{
-    inputId,
-    buttonId,
-    itemId,
-    itemName,
-    slug,
-    maxDonation,
-    isDetailPage,
-    feeSchedule,
-  }}
->
-  // Aviso breve: abajo en móvil y abajo a la derecha en pantallas grandes
-  function showToast(message, type = "error") {
-    const toast = document.createElement("div");
-    toast.setAttribute("role", type === "error" ? "alert" : "status");
-    toast.className = `fixed inset-x-4 bottom-4 z-50 rounded-lg px-5 py-3 text-base font-semibold text-white shadow-lg sm:left-auto sm:right-6 sm:max-w-sm animate-slide-in ${
-      type === "error" ? "bg-red-800" : type === "success" ? "bg-green-800" : "bg-gray-900"
-    }`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
+<script>
+  import { initDonationForm } from "../scripts/donation-form";
 
-    setTimeout(() => {
-      toast.classList.add("opacity-0");
-      setTimeout(() => toast.remove(), 300);
-    }, 6000);
-  }
-
-  const renderButtons = () => {
-    if (typeof paypal === "undefined") {
-      console.error("PayPal SDK no cargado");
-      return;
-    }
-    const amountInput = document.getElementById(inputId);
-    const paypalContainer = document.getElementById(`${buttonId}-paypal`);
-    const cardContainer = document.getElementById(`${buttonId}-card`);
-    const helpText = document.getElementById(`${inputId}-help`);
-    const errorText = document.getElementById(`${inputId}-error`);
-    const coverFeesCheckbox = document.getElementById(`${inputId}-cover-fees`);
-    const feesLabelExtra = document.getElementById(
-      `${inputId}-fees-label-extra`,
-    );
-    const feesSummary = document.getElementById(`${inputId}-fees-summary`);
-
-    if (!amountInput || !paypalContainer || !cardContainer) {
-      console.error("Elementos no encontrados");
-      return;
-    }
-
-    let buttonsEnabled = true;
-
-    const totalWithFees = (neto, source) => {
-      const { rate, fixed } = feeSchedule[source];
-      return Math.round(((neto + fixed) / (1 - rate)) * 100) / 100;
-    };
-    const euros = (value) => value.toFixed(2).replace(".", ",") + " €";
-
-    function updateFeeUI() {
-      if (!coverFeesCheckbox || !feesLabelExtra || !feesSummary) return;
-
-      const value = parseFloat(amountInput.value) || 0;
-      const isValid = value >= 1 && value <= maxDonation;
-
-      if (!coverFeesCheckbox.checked || !isValid) {
-        feesLabelExtra.textContent = "";
-        feesSummary.textContent = "";
-        feesSummary.classList.add("hidden");
-        return;
-      }
-
-      const paypalTotal = totalWithFees(value, "paypal");
-      const cardTotal = totalWithFees(value, "card");
-
-      feesLabelExtra.textContent = ` (+${euros(paypalTotal - value)} con PayPal o +${euros(cardTotal - value)} con tarjeta)`;
-      feesSummary.textContent = `Donación: ${euros(value)}. Total a pagar: ${euros(paypalTotal)} con PayPal o ${euros(cardTotal)} con tarjeta.`;
-      feesSummary.classList.remove("hidden");
-    }
-
-    function validateAmount() {
-      const value = parseFloat(amountInput.value) || 0;
-      const isValid = value >= 1 && value <= maxDonation;
-
-      if (value > maxDonation) {
-        amountInput.classList.add("border-red-500", "ring-2", "ring-red-200");
-        amountInput.classList.remove("border-line-strong");
-        helpText.classList.add("hidden");
-        errorText.classList.remove("hidden");
-        buttonsEnabled = false;
-        paypalContainer.style.opacity = "0.5";
-        paypalContainer.style.pointerEvents = "none";
-        cardContainer.style.opacity = "0.5";
-        cardContainer.style.pointerEvents = "none";
-      } else {
-        amountInput.classList.remove(
-          "border-red-500",
-          "ring-2",
-          "ring-red-200",
-        );
-        amountInput.classList.add("border-line-strong");
-        helpText.classList.remove("hidden");
-        errorText.classList.add("hidden");
-        buttonsEnabled = true;
-        paypalContainer.style.opacity = "1";
-        paypalContainer.style.pointerEvents = "auto";
-        cardContainer.style.opacity = "1";
-        cardContainer.style.pointerEvents = "auto";
-      }
-
-      updateFeeUI();
-      return isValid;
-    }
-
-    // Escuchar cambios en el input
-    amountInput.addEventListener("input", validateAmount);
-    amountInput.addEventListener("change", validateAmount);
-
-    const presetButtons = Array.from(
-      document.querySelectorAll(`#${buttonId}-form [data-amount]`),
-    );
-    const syncPresets = () => {
-      presetButtons.forEach((button) =>
-        button.setAttribute(
-          "aria-pressed",
-          String(button.dataset.amount === amountInput.value),
-        ),
-      );
-    };
-    presetButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        amountInput.value = button.dataset.amount;
-        amountInput.dispatchEvent(new Event("input", { bubbles: true }));
-      });
+  document.querySelectorAll<HTMLElement>("[data-donation-form]").forEach((root) => {
+    const { buttonId, inputId, itemId, slug, maxDonation, feeSchedule, sdkUrl } = root.dataset;
+    initDonationForm({
+      buttonId: buttonId!,
+      inputId: inputId!,
+      itemId: itemId!,
+      slug: slug!,
+      maxDonation: Number(maxDonation),
+      feeSchedule: JSON.parse(feeSchedule!),
+      sdkUrl: sdkUrl!,
     });
-    amountInput.addEventListener("input", syncPresets);
-
-    if (coverFeesCheckbox) {
-      coverFeesCheckbox.addEventListener("change", updateFeeUI);
-    }
-
-    // Detectar si es móvil
-    const isMobile =
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent,
-      ) || window.innerWidth < 768;
-    const showMobileMessage = isMobile && !isDetailPage; // En móvil (lista) mostrar mensaje, en detalles mostrar botones
-
-    // Si es móvil y NO estamos en página de detalles, mostrar mensaje
-    if (showMobileMessage) {
-      const mobileMessage = document.getElementById(
-        `${buttonId}-mobile-message`,
-      );
-      const buttonsContainer = document.getElementById(
-        `${buttonId}-buttons-container`,
-      );
-      const amountInput = document.getElementById(inputId);
-      const labelContainer = document.getElementById(
-        `${inputId}-label-container`,
-      );
-      const helpText = document.getElementById(`${inputId}-help`);
-
-      if (mobileMessage && buttonsContainer && amountInput) {
-        // Mostrar mensaje
-        mobileMessage.classList.remove("hidden");
-
-        // Ocultar botones
-        buttonsContainer.style.display = "none";
-
-        // Ocultar input, label y texto de ayuda
-        amountInput.style.display = "none";
-        if (labelContainer) labelContainer.style.display = "none";
-        if (helpText) helpText.style.display = "none";
-      }
-
-      return; // No renderizar botones
-    }
-
-    // Variables para controlar el estado de carga
-    let isProcessing = false;
-    const loadingIndicator = document.getElementById(`${buttonId}-loading`);
-    const buttonsContainer = document.getElementById(
-      `${buttonId}-buttons-container`,
-    );
-
-    function showLoading() {
-      if (loadingIndicator && buttonsContainer) {
-        loadingIndicator.classList.remove("hidden");
-        buttonsContainer.style.opacity = "0.5";
-        buttonsContainer.style.pointerEvents = "none";
-      }
-    }
-
-    function hideLoading() {
-      if (loadingIndicator && buttonsContainer) {
-        loadingIndicator.classList.add("hidden");
-        buttonsContainer.style.opacity = "1";
-        buttonsContainer.style.pointerEvents = "auto";
-      }
-    }
-
-    // Configuración común para ambos botones
-    const buttonConfig = {
-      onClick: (data, actions) => {
-        // Prevenir clicks múltiples
-        if (isProcessing) {
-          return actions.reject();
-        }
-
-        // Validar cantidad antes de continuar
-        const amount = parseFloat(amountInput.value);
-        if (!amount || amount < 1 || amount > maxDonation) {
-          showToast("Por favor, introduce una cantidad válida", "error");
-          return actions.reject();
-        }
-
-        // Mostrar loading y deshabilitar botones
-        isProcessing = true;
-        showLoading();
-
-        // Ocultar loading después de un tiempo si el formulario se abre correctamente
-        setTimeout(() => {
-          if (isProcessing) {
-            hideLoading();
-          }
-        }, 1500);
-
-        return actions.resolve();
-      },
-      createOrder: async (data, actions, source = "paypal") => {
-        const raw = amountInput.value;
-        let value = Math.max(1, Math.floor(Number(raw) || 0));
-
-        // Validar cantidad mínima
-        if (value < 1) {
-          showToast(
-            "Por favor, introduce una cantidad válida (mínimo 1€)",
-            "error",
-          );
-          return Promise.reject();
-        }
-
-        // Validar cantidad máxima (no exceder lo que falta)
-        if (value > maxDonation) {
-          showToast(
-            `La cantidad máxima que puedes donar es ${maxDonation}€`,
-            "error",
-          );
-          return Promise.reject();
-        }
-
-        const coverFees = coverFeesCheckbox && coverFeesCheckbox.checked;
-
-        try {
-          const response = await fetch(`/api/${slug}/paypal/create-order`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              itemId,
-              amount: value,
-              coverFees,
-              paymentSource: source,
-            }),
-          });
-
-          const orderData = await response.json();
-
-          if (!response.ok) {
-            const errorMsg = orderData.error || "Error al crear la orden";
-            showToast(errorMsg, "error");
-            return Promise.reject(errorMsg);
-          }
-
-          return orderData.id;
-        } catch (error) {
-          console.error("Error creating order:", error);
-          showToast("Error de conexión al crear la orden", "error");
-          return Promise.reject(error);
-        }
-      },
-      onCancel: (data) => {
-        // Usuario canceló el pago
-        hideLoading();
-        isProcessing = false;
-      },
-      onApprove: async (data) => {
-        const attempts = 3;
-        for (let attempt = 1; attempt <= attempts; attempt++) {
-          try {
-            const r = await fetch(`/api/${slug}/paypal/capture-order`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ orderID: data.orderID }),
-            });
-            const json = await r.json();
-
-            if (r.ok) {
-              const form = document.getElementById(`${buttonId}-form`);
-              const thanks = document.getElementById(`${buttonId}-thanks`);
-              if (form && thanks) {
-                form.classList.add("hidden");
-                thanks.classList.remove("hidden");
-                thanks
-                  .querySelector("[data-reload]")
-                  ?.addEventListener("click", () => window.location.reload());
-                thanks.scrollIntoView({ behavior: "smooth", block: "center" });
-              } else {
-                showToast("¡Pago completado con éxito! Gracias por tu contribución.", "success");
-                setTimeout(() => window.location.reload(), 2000);
-              }
-              return;
-            }
-            if (r.status < 500 || attempt === attempts) {
-              hideLoading();
-              isProcessing = false;
-              showToast(json.error || "Error al procesar el pago", "error");
-              return;
-            }
-          } catch (e) {
-            if (attempt === attempts) {
-              hideLoading();
-              isProcessing = false;
-              showToast("Error de red al capturar el pago", "error");
-              return;
-            }
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-      },
-      onError: (err) => {
-        console.error("PayPal Buttons error", err);
-        hideLoading();
-        isProcessing = false;
-        showToast("Error al procesar con PayPal", "error");
-      },
-    };
-
-    // Cada botón tiene su propia tarifa de PayPal, así que le decimos al servidor cuál se usa
-    const configFor = (source) => ({
-      ...buttonConfig,
-      createOrder: (data, actions) =>
-        buttonConfig.createOrder(data, actions, source),
-    });
-
-    // Renderizar botones separados (desktop o página de detalles)
-    paypal
-      .Buttons({
-        ...configFor("paypal"),
-        style: {
-          layout: "horizontal",
-          color: "black",
-          shape: "rect",
-          label: "paypal",
-          height: 48,
-        },
-        fundingSource: paypal.FUNDING.PAYPAL,
-      })
-      .render(`#${buttonId}-paypal`);
-
-    paypal
-      .Buttons({
-        ...configFor("card"),
-        style: {
-          layout: "horizontal",
-          color: "black",
-          shape: "rect",
-          label: "pay",
-          height: 48,
-        },
-        fundingSource: paypal.FUNDING.CARD,
-        onClick: (data, actions) => {
-          // Llamar al onClick del buttonConfig primero
-          const result = buttonConfig.onClick(data, actions);
-
-          // Si el click es válido, ajustar altura en móvil
-          const isMobile =
-            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-              navigator.userAgent,
-            ) || window.innerWidth < 1024;
-          if (isMobile) {
-            setTimeout(() => {
-              const cardContainer = document.getElementById(`${buttonId}-card`);
-              if (cardContainer) {
-                const paypalButtonsDiv =
-                  cardContainer.querySelector(".paypal-buttons");
-                if (paypalButtonsDiv) {
-                  // Calcular altura según ancho de pantalla
-                  let minHeight = 0;
-                  if (window.innerWidth < 400) {
-                    minHeight = 870;
-                  } else if (
-                    window.innerWidth >= 400 &&
-                    window.innerWidth < 500
-                  ) {
-                    minHeight = 820;
-                  } else {
-                    minHeight = 770;
-                  }
-
-                  paypalButtonsDiv.style.setProperty(
-                    "height",
-                    `${minHeight}px`,
-                    "important",
-                  );
-                  paypalButtonsDiv.style.setProperty(
-                    "min-height",
-                    `${minHeight}px`,
-                    "important",
-                  );
-
-                  // Observar cambios para mantener la altura
-                  const observer = new MutationObserver(() => {
-                    const currentHeight =
-                      parseInt(paypalButtonsDiv.style.height) || 0;
-                    if (currentHeight < minHeight) {
-                      paypalButtonsDiv.style.setProperty(
-                        "height",
-                        `${minHeight}px`,
-                        "important",
-                      );
-                    }
-                  });
-
-                  observer.observe(paypalButtonsDiv, {
-                    attributes: true,
-                    attributeFilter: ["style"],
-                  });
-                }
-              }
-            }, 500);
-          }
-
-          return result;
-        },
-      })
-      .render(`#${buttonId}-card`);
-  };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", renderButtons);
-  } else {
-    renderButtons();
-  }
+  });
 </script>
