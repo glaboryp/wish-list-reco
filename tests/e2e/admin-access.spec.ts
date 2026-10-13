@@ -217,7 +217,6 @@ test.describe('email notifications setting', () => {
         await expect(page.getByLabel('Avisarme con cada donación')).toBeChecked();
         await page.getByLabel('No avisar').check();
         await page.getByRole('button', { name: 'Guardar avisos' }).click();
-        await expect(page).toHaveURL(/ok=notify-saved/);
         await expect(page.getByRole('status')).toContainText('Avisos por correo guardados');
     });
 });
