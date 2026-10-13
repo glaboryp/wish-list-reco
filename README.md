@@ -25,6 +25,8 @@ Copia `.env.example` a `.env` y rellénalo:
 | Variable | Para qué |
 | --- | --- |
 | `POSTGRES_URL` | Conexión a Neon |
+| `NEON_FETCH_ENDPOINT` | Solo desarrollo: proxy HTTP local de Neon |
+| `PRODUCTION_DB_HOST`, `ALLOW_REMOTE_DB_RESET` | Guardia de `db:seed`/`db:reset` (ver Desarrollo local) |
 | `BLOB_READ_WRITE_TOKEN` | Subida de imágenes |
 | `ENCRYPTION_KEY` | Clave de cifrado de los secrets de PayPal (`openssl rand -base64 32`) |
 | `SESSION_SECRET` | Firma de la cookie de sesión (`openssl rand -base64 48`) |
@@ -33,11 +35,21 @@ Copia `.env.example` a `.env` y rellénalo:
 
 ## Desarrollo local
 
-```bash
-pnpm install
-node --env-file=.env scripts/migrate.mjs      # aplica las migraciones a POSTGRES_URL
-pnpm dev                      # http://localhost:4321
-```
+`pnpm dev` carga `.env.development` (versionado, sin secretos reales), que apunta a la base de datos local de Docker y sustituye a la de `.env`. Así el desarrollo nunca toca producción. Pasos:
+
+1. Arranca Postgres y el proxy (ver [Base de datos local](#base-de-datos-local)).
+2. `pnpm db:reset` migra y siembra datos ficticios.
+3. `pnpm dev` (http://localhost:4321).
+
+Para iniciar sesión con Google necesitas rellenar `PUBLIC_FIREBASE_*` en un `.env.development.local` (ignorado por git) y dar de alta tu correo como encargado, o usar tu correo como `SUPERADMIN_EMAIL` en ese mismo archivo.
+
+### Datos de ejemplo
+
+- `pnpm db:migrate`: aplica las migraciones.
+- `pnpm db:seed`: crea (o recrea, es idempotente) dos centros, `recoletos` y `santa-clara`, con encargados (`*@example.org`), artículos en borrador, activos, casi completos, completados y archivados, imágenes de `public/`, y más de 100 donaciones (PayPal, manuales y anuladas) para probar la paginación. Las credenciales PayPal son de sandbox; usa `PAYPAL_SANDBOX_CLIENT_ID`/`PAYPAL_SANDBOX_SECRET` para poner las tuyas.
+- `pnpm db:reset`: migrar + sembrar.
+
+El seed borra y vuelve a crear los artículos, encargados y donaciones de esos dos centros. `db:seed` y `db:reset` se niegan a ejecutarse si `POSTGRES_URL` no es local (`localhost`, `127.0.0.1`, `*.localtest.me`), si coincide con `PRODUCTION_DB_HOST` o con el host de `POSTGRES_URL` en `.env`, o si `NODE_ENV=production`/`VERCEL` están definidos. Para sembrar una rama de Neon desechable, define `ALLOW_REMOTE_DB_RESET=1`. `scripts/migrate.mjs` no tiene esta guardia porque también se usa para migrar producción.
 
 ## Migraciones
 
@@ -57,12 +69,12 @@ docker run -d --name wish-proxy --network wish-net -p 4444:4444 \
   ghcr.io/timowilhelm/local-neon-http-proxy:main
 docker exec wish-pg psql -U postgres main -c "CREATE SCHEMA neon_control_plane; CREATE TABLE neon_control_plane.endpoints (endpoint_id text PRIMARY KEY, allowed_ips text[])"
 
-export POSTGRES_URL=postgres://postgres:postgres@db.localtest.me:5432/main
-export NEON_FETCH_ENDPOINT=http://db.localtest.me:4444/sql
-node scripts/migrate.mjs
+pnpm db:reset
 ```
 
-`db.localtest.me` resuelve a `127.0.0.1`; el proxy necesita ese nombre de host. `NEON_FETCH_ENDPOINT` solo se usa con el proxy: no lo definas contra Neon.
+Esos valores ya están en `.env.development`; para otros comandos exporta `POSTGRES_URL=postgres://postgres:postgres@db.localtest.me:5432/main` y `NEON_FETCH_ENDPOINT=http://db.localtest.me:4444/sql`.
+
+`db.localtest.me` resuelve a `127.0.0.1`; el proxy necesita ese nombre de host. `NEON_FETCH_ENDPOINT` solo se usa con el proxy: no lo definas contra Neon (la app lo ignora fuera de `pnpm dev`).
 
 ## Tests
 
