@@ -83,14 +83,13 @@ export interface LivePaypalDonation {
 }
 
 export async function listLivePaypalDonations(centerId: string, sinceDays: number, limit: number): Promise<LivePaypalDonation[]> {
-  const rows = await sql`
+  return sql<LivePaypalDonation>`
     SELECT id, paypal_capture_id FROM donations
     WHERE center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
       AND created_at > NOW() - make_interval(days => ${sinceDays}::int)
     ORDER BY created_at DESC, id DESC
     LIMIT ${limit}
   `;
-  return rows as LivePaypalDonation[];
 }
 
 export const DONATIONS_PAGE_SIZE = 50;
