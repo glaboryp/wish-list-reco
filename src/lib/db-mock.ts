@@ -30,6 +30,7 @@ const item = {
   description: 'Un cáliz para el oratorio',
   goal_amount: '100',
   raised_amount: '25',
+  donor_count: '2',
   status: 'active',
   sort_order: 0,
   created_at: '2026-01-01T00:00:00Z',
@@ -37,6 +38,24 @@ const item = {
   image_url: null,
   alt_text: null,
 };
+
+const nearlyDoneItem = {
+  ...item,
+  id: '33333333-3333-4333-8333-333333333334',
+  name: 'Casulla',
+  goal_amount: '100',
+  raised_amount: '80',
+  sort_order: 1,
+};
+
+const itemImages = ['/favicon.webp', '/oratorio.webp'].map((image_url, sort_order) => ({
+  id: `44444444-4444-4444-8444-44444444444${sort_order}`,
+  item_id: ITEM_ID,
+  image_url,
+  alt_text: null,
+  sort_order,
+  created_at: '2026-01-01T00:00:00Z',
+}));
 
 export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
@@ -63,6 +82,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   if (text.includes('UPDATE donations SET voided_at') && text.includes('voided_by')) {
     return has(RECOLETOS_ID) ? [{ id: '55555555-5555-4555-8555-555555555551' }] : [];
   }
+  if (text.includes('AS donor_count') && text.includes('FROM donations WHERE')) {
+    return [{ donor_count: has(RECOLETOS_ID) ? '2' : '0' }];
+  }
   if (text.includes('COUNT(*) AS total') && text.includes('FROM donations d')) {
     return [{ total: has(RECOLETOS_ID) ? '2' : '0', active_sum: has(RECOLETOS_ID) ? '25.00' : '0' }];
   }
@@ -73,6 +95,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
           { id: '55555555-5555-4555-8555-555555555552', item_id: ITEM_ID, item_name: 'Cáliz', amount: '15.00', fee_amount: '0', currency: 'EUR', source: 'manual', note: 'bizum', voided_at: null, created_at: '2026-10-01T10:00:00Z' },
         ]
       : [];
+  }
+  if (text.includes('FROM item_images WHERE item_id')) {
+    return has(ITEM_ID) ? itemImages : [];
   }
   if (text.includes('item_images img JOIN items')) {
     return has(RECOLETOS_ID)
@@ -86,8 +111,17 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
         }))
       : [];
   }
+  if (text.includes("::text = 'archive'")) {
+    return has(RECOLETOS_ID) ? [{ id: ITEM_ID }] : [];
+  }
+  if (text.includes('AS donation_count') && !text.includes('LIMIT 1')) {
+    return has(RECOLETOS_ID) ? [item, nearlyDoneItem].map((row) => ({ ...row, donation_count: '0', blocking_donation_count: '0' })) : [];
+  }
+  if (text.includes('WHERE i.id =') && !has(ITEM_ID)) {
+    return [];
+  }
   if (text.includes('FROM items')) {
-    return has(RECOLETOS_ID) ? [item] : [];
+    return has(RECOLETOS_ID) ? [item, nearlyDoneItem] : [];
   }
   return [];
 }

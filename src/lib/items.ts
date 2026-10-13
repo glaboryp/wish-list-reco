@@ -9,6 +9,7 @@ export function toWishlistItem(row: ItemRow): WishlistItem {
     description: row.description ?? '',
     goal,
     raised,
+    donorCount: Number(row.donor_count ?? 0),
     imageUrl: row.image_url,
     imageAlt: row.alt_text,
     status: raised >= goal ? 'funded' : 'active',

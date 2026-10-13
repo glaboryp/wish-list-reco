@@ -53,6 +53,7 @@ export interface DBItem {
 
 export interface ItemRow extends DBItem {
   raised_amount: string;
+  donor_count?: string | number;
   image_url: string | null;
   alt_text: string | null;
 }
@@ -72,6 +73,7 @@ export interface WishlistItem {
   description: string;
   goal: number;
   raised: number;
+  donorCount: number;
   imageUrl: string | null;
   imageAlt: string | null;
   status: 'active' | 'funded';

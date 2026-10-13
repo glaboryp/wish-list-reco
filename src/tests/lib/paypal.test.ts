@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encryptSecret } from '../../lib/crypto';
-import { apiBase, captureOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
+import { apiBase, captureOrder, clearTokenCache, lookupCaptureRefund, lookupOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
 import type { CenterWithSecret } from '../../types/database';
 
 const key = Buffer.alloc(32, 1).toString('base64');
@@ -27,7 +27,10 @@ const completed = {
   ],
 };
 
-beforeEach(() => fetchMock.mockReset());
+beforeEach(() => {
+  fetchMock.mockReset();
+  clearTokenCache();
+});
 
 describe('credentialsFor', () => {
   it('decrypts the stored secret', () => {
@@ -188,5 +191,89 @@ describe('custom id with the donation amount', () => {
       }),
     );
     expect(await captureOrder(creds, 'ORDER-9')).toMatchObject({ itemId: 'item-1', amount: '10.66', donationAmount: '10.00' });
+  });
+});
+
+describe('access token cache', () => {
+  it('reuses the token until shortly before it expires', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ok({ access_token: 'tok', expires_in: 32400 }))
+      .mockResolvedValueOnce(ok({ id: 'O1' }))
+      .mockResolvedValueOnce(ok({ id: 'O2' }));
+    const input = { amount: 1, description: 'd', itemId: 'i', brandName: 'b' };
+    await createOrder(creds, input);
+    await createOrder(creds, input);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/oauth2/token'))).toHaveLength(1);
+  });
+
+  it('requests a new token once the cached one is about to expire', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(async (url: string) =>
+        String(url).includes('/oauth2/token') ? ok({ access_token: 'tok', expires_in: 300 }) : ok({ id: 'O' }),
+      );
+      const input = { amount: 1, description: 'd', itemId: 'i', brandName: 'b' };
+      await createOrder(creds, input);
+      vi.advanceTimersByTime(250_000);
+      await createOrder(creds, input);
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/oauth2/token'))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+      fetchMock.mockReset();
+    }
+  });
+
+  it('does not share tokens between credentials', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/oauth2/token') ? ok({ access_token: 'tok', expires_in: 32400 }) : ok({ id: 'O' }),
+    );
+    const input = { amount: 1, description: 'd', itemId: 'i', brandName: 'b' };
+    await createOrder(creds, input);
+    await createOrder({ ...creds, clientSecret: 'other' }, input);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/oauth2/token'))).toHaveLength(2);
+  });
+});
+
+describe('lookupOrder', () => {
+  it('returns the capture of a completed order', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(completed));
+    expect(await lookupOrder(creds, 'ORDER-1')).toEqual({
+      state: 'completed',
+      capture: { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: null },
+    });
+  });
+
+  it('reports the status of an order that is not completed', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok({ status: 'APPROVED' }));
+    expect(await lookupOrder(creds, 'ORDER-1')).toEqual({ state: 'not_completed', status: 'APPROVED' });
+  });
+
+  it('reports a missing order', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(fail(404, {}));
+    expect(await lookupOrder(creds, 'ORDER-1')).toEqual({ state: 'not_found' });
+  });
+
+  it('throws on other lookup failures', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(fail(500, {}));
+    await expect(lookupOrder(creds, 'ORDER-1')).rejects.toBeInstanceOf(PayPalError);
+  });
+});
+
+describe('lookupCaptureRefund', () => {
+  const lookup = (response: unknown) => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(response);
+    return lookupCaptureRefund(creds, 'CAP1');
+  };
+
+  it('maps the capture status', async () => {
+    expect(await lookup(ok({ status: 'REFUNDED' }))).toBe('refunded');
+    expect(await lookup(ok({ status: 'PARTIALLY_REFUNDED' }))).toBe('partially_refunded');
+    expect(await lookup(ok({ status: 'COMPLETED' }))).toBe('not_refunded');
+    expect(await lookup(fail(404, {}))).toBe('not_found');
+  });
+
+  it('queries the capture endpoint and throws on other failures', async () => {
+    await expect(lookup(fail(500, {}))).rejects.toBeInstanceOf(PayPalError);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/v2/payments/captures/CAP1');
   });
 });
