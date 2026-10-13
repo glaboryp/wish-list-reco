@@ -29,7 +29,7 @@ test.describe('reordering items', () => {
         await expect(rowNames(page)).toHaveText(['Casulla', 'Cáliz']);
         await expect(page.locator('[data-reorder-status]')).toContainText('«Cáliz» movido a la posición 2 de 2.');
         expect((await request).postDataJSON()).toEqual({
-            ids: ['66666666-6666-4666-8666-666666666666', '33333333-3333-4333-8333-333333333333'],
+            ids: ['33333333-3333-4333-8333-333333333334', '33333333-3333-4333-8333-333333333333'],
         });
         await expect(page.locator('[data-reorder-status]')).toContainText('Orden guardado');
         await expect(page.locator('tr[data-reorderable]').first().locator('[data-position]')).toHaveText('1');
