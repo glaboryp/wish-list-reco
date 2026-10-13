@@ -1,9 +1,10 @@
 ---
 import CenterPage from "../../layouts/CenterPage.astro";
 import WishlistItem from "../../components/WishlistItem.astro";
-import { formatEuro } from "../../lib/format";
+import { formatDonorCount, formatEuro } from "../../lib/format";
 import { centerNotFoundPage } from "../../lib/error-pages";
 import { getCenterBySlug } from "../../lib/repo/centers";
+import { countCenterDonors } from "../../lib/repo/donations";
 import { listPublicItems } from "../../lib/repo/items";
 import { buildCenterMeta } from "../../lib/seo";
 
@@ -14,7 +15,8 @@ if (!center || center.status !== 'active') {
   return centerNotFoundPage();
 }
 
-const items = await listPublicItems(center.id);
+const [items, donorCount] = await Promise.all([listPublicItems(center.id), countCenterDonors(center.id)]);
+const donors = formatDonorCount(donorCount);
 const paragraphs = center.hero_text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 const totalGoal = items.reduce((sum, item) => sum + item.goal, 0);
 const totalRaised = items.reduce((sum, item) => sum + Math.min(item.raised, item.goal), 0);
@@ -51,6 +53,7 @@ const meta = buildCenterMeta({
           Llevamos reunidos {formatEuro(totalRaised)} de {formatEuro(totalGoal)}.
         </p>
       )}
+      {donors && <p data-donor-count class="mt-2 text-base text-white/90">{donors}</p>}
       <a
         href="#wishlist"
         class="cta mt-8 inline-flex min-h-12 items-center justify-center rounded-lg px-6 text-base font-semibold text-white shadow-lg ring-2 ring-white transition-colors"

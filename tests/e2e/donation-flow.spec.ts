@@ -93,3 +93,12 @@ test('Item page exposes share metadata', async ({ page, request }) => {
     expect(xml).toContain('/recoletos</loc>');
     expect(xml).toContain('/recoletos/item/');
 });
+
+test('Shows the anonymous donor counter', async ({ page }) => {
+    await page.goto('/recoletos');
+    await expect(page.locator('[data-donor-count]').first()).toHaveText('2 personas han donado');
+    await expect(page.locator('article [data-donor-count]').first()).toHaveText('2 personas han donado');
+
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+    await expect(page.locator('[data-donor-count]')).toHaveText('2 personas han donado');
+});

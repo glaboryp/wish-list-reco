@@ -7,9 +7,13 @@ export async function listPublicItems(centerId: string): Promise<WishlistItem[]>
   const rows = await sql`
     SELECT
       i.id, i.center_id, i.name, i.description, i.goal_amount, i.status, i.sort_order, i.created_at, i.updated_at,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
+      dn.raised_amount, dn.donor_count,
       img.image_url, img.alt_text
     FROM items i
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(d.amount), 0) AS raised_amount, COUNT(*) AS donor_count
+      FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL
+    ) dn ON true
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
     WHERE i.center_id = ${centerId} AND i.status IN ('active', 'funded')
     ORDER BY i.sort_order ASC, i.created_at ASC
@@ -21,9 +25,13 @@ export async function getPublicItem(centerId: string, itemId: string): Promise<W
   const rows = await sql`
     SELECT
       i.id, i.center_id, i.name, i.description, i.goal_amount, i.status, i.sort_order, i.created_at, i.updated_at,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
+      dn.raised_amount, dn.donor_count,
       img.image_url, img.alt_text
     FROM items i
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(d.amount), 0) AS raised_amount, COUNT(*) AS donor_count
+      FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL
+    ) dn ON true
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
     WHERE i.id = ${itemId} AND i.center_id = ${centerId} AND i.status IN ('active', 'funded')
     LIMIT 1

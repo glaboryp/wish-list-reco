@@ -17,7 +17,7 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { addManualDonation, countCenterDonors, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
@@ -76,6 +76,22 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
     expect(await voidManualDonation(centerA, manual[0].id)).toBe(true);
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 60, status: 'active' });
+  });
+
+  it('counts only non-voided donations per item and per center', async () => {
+    const item = await createItem(centerB, { ...itemInput, name: 'donors', sortOrder: 9300 });
+    expect(await countCenterDonors(centerB)).toBe(0);
+    await recordPaypalDonation({ centerId: centerB, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-d1` });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 7, note: 'bizum' });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 3, note: 'voided' });
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(3);
+    const voided = await sql`SELECT id FROM donations WHERE item_id = ${item} AND note = 'voided'`;
+    expect(await voidManualDonation(centerB, voided[0].id)).toBe(true);
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(2);
+    expect(await countCenterDonors(centerB)).toBe(2);
+
+    await sql`DELETE FROM donations WHERE item_id = ${item}`;
+    await sql`DELETE FROM items WHERE id = ${item}`;
   });
 
   it('credits the net donation and keeps the fee apart', async () => {
