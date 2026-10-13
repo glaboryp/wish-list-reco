@@ -28,7 +28,8 @@
     "@vercel/speed-insights": "^2",
     "astro": "^7",
     "firebase": "^12.19.0",
-    "jose": "^6.2.12"
+    "jose": "^6.2.12",
+    "nodemailer": "^10.1.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
@@ -36,6 +37,7 @@
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.19.0",
+    "@types/nodemailer": "^8.0.2",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",

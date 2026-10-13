@@ -29,7 +29,9 @@ Copia `.env.example` a `.env` y rellénalo:
 | `PRODUCTION_DB_HOST`, `ALLOW_REMOTE_DB_RESET` | Guardia de `db:seed`/`db:reset` (ver Desarrollo local) |
 | `BLOB_READ_WRITE_TOKEN` | Subida de imágenes |
 | `ENCRYPTION_KEY` | Clave de cifrado de los secrets de PayPal (`openssl rand -base64 32`) |
-| `RESEND_API_KEY`, `EMAIL_FROM` | Avisos por correo de las donaciones con [Resend](https://resend.com) (remitente verificado). Opcionales: si faltan, no se envía ningún correo |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Avisos por correo de las donaciones con [Resend](https://resend.com) (necesita un dominio con remitente verificado). Tiene prioridad sobre SMTP |
+| `SMTP_USER`, `SMTP_PASSWORD` | Alternativa sin dominio: envío por SMTP, p. ej. una cuenta de Gmail (`SMTP_USER` es la dirección y `SMTP_PASSWORD` una [contraseña de aplicación](https://myaccount.google.com/apppasswords)). Opcionales `SMTP_HOST` (por defecto `smtp.gmail.com`) y `SMTP_PORT` (por defecto `465`, seguro). `EMAIL_FROM` es opcional (por defecto `Listas de deseos <SMTP_USER>`); Gmail sustituye cualquier otro remitente por la dirección de la cuenta |
+| (sin ninguna de las dos) | No se envía ningún correo |
 | `SESSION_SECRET` | Firma de la cookie de sesión (`openssl rand -base64 48`) |
 | `SUPERADMIN_EMAIL` | Único superadmin |
 | `CRON_SECRET` | Protege `/api/cron/paypal-sync`, que Vercel Cron llama a diario (`openssl rand -base64 32`). Debe estar definida en Vercel |

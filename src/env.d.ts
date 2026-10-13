@@ -6,6 +6,10 @@ interface ImportMetaEnv {
   readonly ENCRYPTION_KEY: string;
   readonly RESEND_API_KEY?: string;
   readonly EMAIL_FROM?: string;
+  readonly SMTP_USER?: string;
+  readonly SMTP_PASSWORD?: string;
+  readonly SMTP_HOST?: string;
+  readonly SMTP_PORT?: string;
   readonly SESSION_SECRET: string;
   readonly SUPERADMIN_EMAIL: string;
   readonly PUBLIC_FIREBASE_API_KEY: string;

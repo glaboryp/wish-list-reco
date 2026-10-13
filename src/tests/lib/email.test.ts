@@ -4,6 +4,12 @@ const { getDonationSummary, listCenterUsers } = vi.hoisted(() => ({ getDonationS
 vi.mock('../../lib/repo/donations', () => ({ getDonationSummary }));
 vi.mock('../../lib/repo/users', () => ({ listCenterUsers }));
 
+const { sendMail, createTransport } = vi.hoisted(() => {
+  const sendMail = vi.fn();
+  return { sendMail, createTransport: vi.fn(() => ({ sendMail })) };
+});
+vi.mock('nodemailer', () => ({ default: { createTransport } }));
+
 import { notifyDonation } from '../../lib/email/notify';
 import { sendDonationEmails } from '../../lib/email/send';
 import { donorEmail, escapeHtml, managerEmail, PRIVACY_NOTE } from '../../lib/email/templates';
@@ -90,6 +96,73 @@ describe('sendDonationEmails', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(error).toHaveBeenCalledTimes(1);
     error.mockRestore();
+  });
+});
+
+describe('SMTP transport', () => {
+  beforeEach(() => {
+    vi.stubEnv('RESEND_API_KEY', '');
+    vi.stubEnv('EMAIL_FROM', '');
+    vi.stubEnv('SMTP_USER', 'avisos@gmail.test');
+    vi.stubEnv('SMTP_PASSWORD', 'app-password');
+    sendMail.mockResolvedValue({});
+  });
+
+  it('is used when only SMTP is configured, with Gmail defaults and short timeouts', async () => {
+    await sendDonationEmails({ data, managerEmails: ['m@example.org'], donorEmail: 'd@example.org' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: { user: 'avisos@gmail.test', pass: 'app-password' },
+        connectionTimeout: 4000,
+        greetingTimeout: 4000,
+        socketTimeout: 4000,
+      }),
+    );
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(sendMail.mock.calls[0][0]).toMatchObject({
+      from: 'Listas de deseos <avisos@gmail.test>',
+      to: ['m@example.org'],
+    });
+    expect(sendMail.mock.calls[1][0].to).toEqual(['d@example.org']);
+  });
+
+  it('honours SMTP_HOST, SMTP_PORT and EMAIL_FROM', async () => {
+    vi.stubEnv('SMTP_HOST', 'smtp.example.org');
+    vi.stubEnv('SMTP_PORT', '587');
+    vi.stubEnv('EMAIL_FROM', 'Avisos <a@example.org>');
+    await sendDonationEmails({ data, managerEmails: ['m@example.org'], donorEmail: null });
+    expect(createTransport).toHaveBeenCalledWith(expect.objectContaining({ host: 'smtp.example.org', port: 587, secure: false }));
+    expect(sendMail.mock.calls[0][0].from).toBe('Avisos <a@example.org>');
+  });
+
+  it('yields to Resend when RESEND_API_KEY is set', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_test');
+    vi.stubEnv('EMAIL_FROM', 'Avisos <avisos@example.org>');
+    await sendDonationEmails({ data, managerEmails: ['m@example.org'], donorEmail: null });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('only logs failures and still sends the other email', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    sendMail.mockRejectedValueOnce(new Error('auth failed'));
+    await expect(
+      sendDonationEmails({ data, managerEmails: ['m@example.org'], donorEmail: 'd@example.org' }),
+    ).resolves.toBeUndefined();
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it('sends nothing without credentials', async () => {
+    vi.stubEnv('SMTP_PASSWORD', '');
+    await sendDonationEmails({ data, managerEmails: ['m@example.org'], donorEmail: 'd@example.org' });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(createTransport).not.toHaveBeenCalled();
   });
 });
 
