@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { assertSafeDatabase } from '../../../scripts/lib/guard.mjs';
 
@@ -31,5 +34,32 @@ describe('database safety guard', () => {
       message = (error as Error).message;
     }
     expect(message).not.toContain('secret');
+  });
+
+  it('recognises the production database through its pooled and unpooled hostnames', () => {
+    const base = { ALLOW_REMOTE_DB_RESET: '1' };
+    const pooled = 'postgres://u:p@ep-cool-1234-pooler.eu-central-1.aws.neon.tech/main';
+    const direct = 'postgres://u:p@ep-cool-1234.eu-central-1.aws.neon.tech/main';
+    expect(check({ ...base, POSTGRES_URL: direct, PRODUCTION_DB_HOST: 'ep-cool-1234-pooler.eu-central-1.aws.neon.tech' })).toThrow(/production/);
+    expect(check({ ...base, POSTGRES_URL: pooled, PRODUCTION_DB_HOST: 'EP-COOL-1234.eu-central-1.aws.neon.tech' })).toThrow(/production/);
+    expect(check({ ...base, POSTGRES_URL: pooled, PRODUCTION_DB_HOST: 'ep-other-9999.eu-central-1.aws.neon.tech' })).not.toThrow();
+  });
+
+  it('treats a Neon host as remote and needs the explicit opt-in', () => {
+    const url = 'postgres://u:p@ep-cool-1234-pooler.eu-central-1.aws.neon.tech/main';
+    expect(check({ POSTGRES_URL: url })).toThrow(/not a local database/);
+  });
+
+  it('reads both connection strings from the dotenv file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'guard-'));
+    const dotenv = join(dir, '.env');
+    writeFileSync(
+      dotenv,
+      'POSTGRES_URL="postgres://u:p@ep-cool-1234-pooler.eu-central-1.aws.neon.tech/main"\nPOSTGRES_URL_NON_POOLING=postgres://u:p@ep-cool-1234.eu-central-1.aws.neon.tech/main\n',
+    );
+    for (const host of ['ep-cool-1234.eu-central-1.aws.neon.tech', 'ep-cool-1234-pooler.eu-central-1.aws.neon.tech']) {
+      expect(() => assertSafeDatabase({ POSTGRES_URL: `postgres://u:p@${host}/main`, ALLOW_REMOTE_DB_RESET: '1' }, dotenv)).toThrow(/production/);
+    }
+    rmSync(dir, { recursive: true });
   });
 });
