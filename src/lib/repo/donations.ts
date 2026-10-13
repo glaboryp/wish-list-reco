@@ -115,13 +115,12 @@ export async function listDonations(
 }
 
 export async function listAllDonations(centerId: string, itemId: string | null = null): Promise<DonationRow[]> {
-  const rows = await sql`
+  return sql<DonationRow>`
     SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
     FROM donations d JOIN items i ON i.id = d.item_id
     WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
     ORDER BY d.created_at DESC, d.id DESC
   `;
-  return rows as DonationRow[];
 }
 
 export const RECENT_DONATIONS_LIMIT = 5;

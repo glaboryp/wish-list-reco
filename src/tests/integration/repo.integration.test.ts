@@ -85,7 +85,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await addManualDonation({ centerId: centerB, itemId: item, amount: 7, note: 'bizum' });
     await addManualDonation({ centerId: centerB, itemId: item, amount: 3, note: 'voided' });
     expect((await listPublicItems(centerB))[0].donorCount).toBe(3);
-    const voided = await sql`SELECT id FROM donations WHERE item_id = ${item} AND note = 'voided'`;
+    const voided = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${item} AND note = 'voided'`;
     expect(await voidManualDonation(centerB, voided[0].id)).toBe(true);
     expect((await listPublicItems(centerB))[0].donorCount).toBe(2);
     expect(await countCenterDonors(centerB)).toBe(2);
