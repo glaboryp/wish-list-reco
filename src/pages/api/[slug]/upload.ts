@@ -1,12 +1,10 @@
 import type { APIRoute } from 'astro';
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { authorizeCenter, getActor } from '../../../lib/auth/access';
+import { json } from '../../../lib/http';
 
 const ALLOWED_TYPES = ['image/webp', 'image/jpeg', 'image/png'];
 const MAX_BYTES = 5 * 1024 * 1024;
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 export const POST: APIRoute = async ({ request, params, cookies }) => {
   const access = await authorizeCenter(await getActor(cookies), params.slug ?? '');

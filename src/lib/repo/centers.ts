@@ -42,7 +42,7 @@ export async function getCenterBySlug(slug: string): Promise<Center | null> {
 }
 
 export async function getCenterWithSecret(slug: string): Promise<CenterWithSecret | null> {
-  const rows = await sql`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sql<{ paypal_secret_encrypted: string | null }>`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
   if (rows.length === 0) return null;
   return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
 }
@@ -58,7 +58,7 @@ export async function createCenter(input: { slug: string; name: string }): Promi
 }
 
 export async function updateAppearance(centerId: string, input: AppearanceInput): Promise<void> {
-  const rows = await sql`
+  const rows = await sql<{ old_hero: string | null; old_logo: string | null }>`
     WITH old AS (SELECT hero_image_url, logo_url FROM centers WHERE id = ${centerId})
     UPDATE centers SET
       name = ${input.name},

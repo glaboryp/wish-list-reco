@@ -17,7 +17,7 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { addManualDonation, countCenterDonors, getDashboard, listAllDonations, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
@@ -76,9 +76,25 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await addManualDonation({ centerId: centerA, itemId: itemA, amount: 40, note: 'efectivo' })).toEqual({ status: 'created' });
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 100, status: 'funded' });
 
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
     expect(await voidManualDonation(centerA, manual[0].id)).toBe(true);
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 60, status: 'active' });
+  });
+
+  it('counts only non-voided donations per item and per center', async () => {
+    const item = await createItem(centerB, { ...itemInput, name: 'donors', sortOrder: 9300 });
+    expect(await countCenterDonors(centerB)).toBe(0);
+    await recordPaypalDonation({ centerId: centerB, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-d1` });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 7, note: 'bizum' });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 3, note: 'voided' });
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(3);
+    const voided = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${item} AND note = 'voided'`;
+    expect(await voidManualDonation(centerB, voided[0].id)).toBe(true);
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(2);
+    expect(await countCenterDonors(centerB)).toBe(2);
+
+    await sql`DELETE FROM donations WHERE item_id = ${item}`;
+    await sql`DELETE FROM items WHERE id = ${item}`;
   });
 
   it('credits the net donation and keeps the fee apart', async () => {
@@ -100,7 +116,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: id, amount: '20.00', currency: 'EUR', captureId: `CAP-${suffix}-refund` });
     expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 20 });
     expect((await listPublicItems(centerA)).find((item) => item.id === id)).toMatchObject({ status: 'funded' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
 
     expect(await voidPaypalDonation(centerB, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     expect(await voidPaypalDonation(centerA, donation, { reason: 'reembolso', actorEmail: 'boss@example.org' })).toBe('voided');
@@ -120,7 +136,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
   it('does not let manual donations be voided as PayPal ones or carry void metadata', async () => {
     const id = await createItem(centerA, { ...itemInput, name: 'manual-only', sortOrder: 9201 });
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: '' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
     expect(await voidPaypalDonation(centerA, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     await expect(sql`UPDATE donations SET void_reason = 'x' WHERE id = ${donation}`).rejects.toThrow();
 
@@ -138,7 +154,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: itemTwo, amount: '7.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
     await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-foreign` });
     await addManualDonation({ centerId: centerA, itemId: itemOne, amount: 3, note: 'to void' });
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
     await voidManualDonation(centerA, manual[0].id);
 
     const first = await listDonations(centerA, { itemId: itemOne, page: 1, pageSize: 4 });
@@ -157,6 +173,31 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id IN (${itemOne}, ${itemTwo}, ${foreign})`;
     await sql`DELETE FROM items WHERE id IN (${itemOne}, ${itemTwo}, ${foreign})`;
+  });
+
+  it('exports all donations of one center and matches the dashboard to the list totals', async () => {
+    const item = await createItem(centerA, { ...itemInput, name: 'export-1', goal: 1000, sortOrder: 9100 });
+    const foreign = await createItem(centerB, { ...itemInput, name: 'export-foreign', goal: 1000 });
+    for (let n = 0; n < 7; n++) {
+      await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '4.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-${n}` });
+    }
+    await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-foreign` });
+    await voidPaypalDonation(centerA, (await listDonations(centerA, { itemId: item })).rows[0].id, { reason: 'test', actorEmail: 'a@b.c' });
+
+    const exported = await listAllDonations(centerA, item);
+    expect(exported).toHaveLength(7);
+    expect(await listAllDonations(centerA, foreign)).toEqual([]);
+    expect((await listAllDonations(centerA)).some((row) => row.item_id === foreign)).toBe(false);
+
+    const list = await listDonations(centerA, { pageSize: 1000 });
+    const dashboard = await getDashboard(centerA);
+    expect(dashboard.donationCount).toBe(list.total);
+    expect(dashboard.netRaised).toBe(list.activeSum);
+    expect(dashboard.recent.length).toBeLessThanOrEqual(5);
+    expect(dashboard.items.some((entry) => entry.id === item)).toBe(true);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${item}, ${foreign})`;
+    await sql`DELETE FROM items WHERE id IN (${item}, ${foreign})`;
   });
 
   it('does not count the same PayPal capture twice', async () => {
@@ -188,7 +229,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: 'b' });
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 2 });
 
-    for (const row of await sql`SELECT id FROM donations WHERE item_id = ${id}`) {
+    for (const row of await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`) {
       await voidManualDonation(centerA, row.id);
     }
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 0 });
@@ -202,7 +243,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const live = await createItem(centerA, { ...itemInput, name: 'one-live', sortOrder: 9101 });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 10, note: 'voided' });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 5, note: 'live' });
-    const first = await sql`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
+    const first = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
     await voidManualDonation(centerA, first[0].id);
     expect(await removeOrArchiveItem(centerA, live)).toBe('archived');
     expect(await getAdminItem(centerA, live)).toMatchObject({ status: 'archived', donationCount: 2, blockingDonationCount: 1 });

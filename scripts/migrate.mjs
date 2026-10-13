@@ -1,10 +1,15 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { neon } from '@neondatabase/serverless';
+import { neon, neonConfig } from '@neondatabase/serverless';
 
 const url = process.env.POSTGRES_URL;
 if (!url) {
   console.error('POSTGRES_URL is required');
   process.exit(1);
+}
+
+if (process.env.NEON_FETCH_ENDPOINT) {
+  neonConfig.fetchEndpoint = process.env.NEON_FETCH_ENDPOINT;
+  neonConfig.useSecureWebSocket = false;
 }
 
 const sql = neon(url);

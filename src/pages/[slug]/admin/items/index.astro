@@ -109,7 +109,7 @@ const statusChip = (status: string, raised: number, goal: number) => {
                     <span class="flex items-center gap-3 max-md:flex-row-reverse">
                       <input type="checkbox" name="ids" value={item.id} data-select class="h-5 w-5 shrink-0 accent-brand" aria-label={`Seleccionar ${item.name}`} />
                       {item.imageUrl
-                        ? <img src={item.imageUrl} alt="" class="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
+                        ? <img src={item.imageUrl} alt="" width="48" height="48" loading="lazy" decoding="async" class="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
                         : <span class="h-12 w-12 shrink-0 rounded-md border border-line bg-surface"></span>}
                       <span>{item.name}</span>
                     </span>
