@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import EmptyState from "../../../components/admin/EmptyState.astro";
 import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { parseEmail } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
@@ -43,6 +44,14 @@ const isSelf = (email: string) => !actor.isSuperadmin && email === actor.email.t
 >
   <div class={cardClass}>
     <h2 class="mb-2 text-xl font-bold text-ink">Personas con acceso</h2>
+    {users.length === 0 ? (
+      <EmptyState
+        title="Este centro no tiene encargadas"
+        text="Nadie, aparte de la administración de la plataforma, puede gestionar esta web. Da acceso a una persona con su correo de Google."
+        actionLabel="Dar acceso a una encargada"
+        actionHref="#dar-acceso"
+      />
+    ) : (
     <table class={tableClass}>
       <thead>
         <tr>
@@ -74,9 +83,10 @@ const isSelf = (email: string) => !actor.isSuperadmin && email === actor.email.t
         ))}
       </tbody>
     </table>
+    )}
   </div>
 
-  <form method="post" class={`${cardClass} space-y-5`}>
+  <form method="post" id="dar-acceso" class={`${cardClass} space-y-5`}>
     <div>
       <h2 class="text-xl font-bold text-ink">Dar acceso a otra encargada</h2>
       <p class="mt-1 text-base text-muted">Podrá entrar al panel de este centro con la cuenta de Google de ese correo.</p>

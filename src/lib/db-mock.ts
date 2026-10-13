@@ -110,6 +110,12 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
         }))
       : [];
   }
+  if (text.includes("::text = 'archive'")) {
+    return has(RECOLETOS_ID) ? [{ id: ITEM_ID }] : [];
+  }
+  if (text.includes('AS donation_count') && !text.includes('LIMIT 1')) {
+    return has(RECOLETOS_ID) ? [item, nearlyDoneItem].map((row) => ({ ...row, donation_count: '0', blocking_donation_count: '0' })) : [];
+  }
   if (text.includes('WHERE i.id =') && !has(ITEM_ID)) {
     return [];
   }

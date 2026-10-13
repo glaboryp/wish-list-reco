@@ -4,7 +4,7 @@ import ImageUpload from "../../../../components/admin/ImageUpload.astro";
 import { buttonClass, cardClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, linkClass, secondaryButtonClass } from "../../../../components/admin/ui";
 import Icon from "../../../../components/Icon.astro";
 import { formatEuro } from "../../../../lib/format";
-import { MAX_ITEM_IMAGES, addItemImage, listAdminItems, listItemImages, removeItemImage, setCoverImage } from "../../../../lib/repo/items";
+import { MAX_ITEM_IMAGES, addItemImage, duplicateItem, listAdminItems, listItemImages, removeItemImage, setCoverImage } from "../../../../lib/repo/items";
 import { positionOptions } from "../../../../lib/admin/positions";
 import { parseImageUrl, parseItem } from "../../../../lib/admin/forms";
 import { guardCenter } from "../../../../lib/auth/guard";
@@ -25,6 +25,12 @@ if (!item) return new Response('Artículo no encontrado', { status: 404 });
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const here = `${listUrl}/${item.id}`;
+
+  if (form.get('intent') === 'duplicate') {
+    const copyId = await duplicateItem(center.id, item.id);
+    if (!copyId) return Astro.redirect(`${here}?error=${encodeURIComponent('No se pudo duplicar el artículo')}`, 303);
+    return Astro.redirect(`${listUrl}/${copyId}?ok=item-duplicated`, 303);
+  }
 
   if (form.get('intent') === 'remove') {
     const outcome = await removeOrArchiveItem(center.id, item.id);
@@ -81,7 +87,7 @@ const positions = positionOptions(allItems, item.id);
     </div>
   )}
 
-  <form method="post" class={`${cardClass} space-y-5`}>
+  <form method="post" data-guard class={`${cardClass} space-y-5`}>
     <div>
       <label class={labelClass} for="name">Nombre del artículo</label>
       <input id="name" name="name" class={inputClass} value={item.name} maxlength="120" required />
@@ -115,7 +121,14 @@ const positions = positionOptions(allItems, item.id);
     </div>
     <div class={formFooterClass}>
       <button type="submit" class={buttonClass}>Guardar cambios</button>
+      <button type="submit" form="duplicate-form" class={secondaryButtonClass}>
+        <Icon name="copy" class="h-5 w-5" />
+        Duplicar artículo
+      </button>
     </div>
+  </form>
+  <form method="post" id="duplicate-form">
+    <input type="hidden" name="intent" value="duplicate" />
   </form>
 
   <section class={`${cardClass} space-y-5`}>

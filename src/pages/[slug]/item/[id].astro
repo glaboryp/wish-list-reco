@@ -41,7 +41,7 @@ const meta = buildItemMeta({
 ---
 
 <CenterPage title={meta.title} description={meta.description} image={meta.image} canonical={meta.canonical} primaryColor={center.primary_color}>
-  <main class:list={["mx-auto max-w-6xl px-4 py-8 sm:py-10", canDonate && "pb-28 md:pb-10"]}>
+  <main id="contenido" class:list={["mx-auto max-w-6xl px-4 py-8 sm:py-10", canDonate && "pb-28 md:pb-10"]}>
     <a href={`/${center.slug}#wishlist`} class="mb-6 inline-flex min-h-11 items-center gap-2 font-semibold text-ink hover:underline">
       <Icon name="arrow-left" class="h-4 w-4" />
       Volver a la lista
