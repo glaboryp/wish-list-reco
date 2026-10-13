@@ -13,6 +13,15 @@
   --color-line-strong: #8993a4;
   --color-surface: #f7f8fa;
 
+  --color-chip-ok-bg: #dcfce7;
+  --color-chip-ok-fg: #14532d;
+  --color-chip-info-bg: #e9eefb;
+  --color-chip-info-fg: #223c87;
+  --color-chip-warn-bg: #fef3c7;
+  --color-chip-warn-fg: #78350f;
+  --color-chip-muted-bg: #eceef2;
+  --color-chip-muted-fg: #374151;
+
   --shadow-card: 0 1px 2px rgb(27 36 51 / 0.05), 0 4px 14px rgb(27 36 51 / 0.05);
   --shadow-lift: 0 2px 4px rgb(43 75 168 / 0.08), 0 10px 28px rgb(43 75 168 / 0.12);
 }

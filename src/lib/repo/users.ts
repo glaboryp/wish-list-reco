@@ -21,11 +21,11 @@ export async function linkFirebaseUid(email: string, uid: string): Promise<void>
 }
 
 export async function listCenterUsers(centerId: string): Promise<CenterUserRow[]> {
-  const rows = await sql`
+  const rows = await sql<CenterUserRow>`
     SELECT email, firebase_uid, created_at FROM center_users
     WHERE center_id = ${centerId} ORDER BY created_at ASC
   `;
-  return rows as CenterUserRow[];
+  return rows;
 }
 
 export async function addCenterUser(centerId: string, email: string): Promise<boolean> {

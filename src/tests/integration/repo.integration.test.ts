@@ -23,10 +23,11 @@ vi.mock('../../lib/db', async () => {
 
 import sql from '../../lib/db';
 import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { addManualDonation, countCenterDonors, getDashboard, listAllDonations, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import {
   addItemImage,
   createItem,
+  duplicateItem,
   getAdminItem,
   listAdminItems,
   listItemImages,
@@ -34,7 +35,9 @@ import {
   MAX_ITEM_IMAGES,
   removeItemImage,
   removeOrArchiveItem,
+  reorderItems,
   setCoverImage,
+  setItemsStatus,
   updateItem,
 } from '../../lib/repo/items';
 import { reconcilePendingCaptures } from '../../lib/paypal-reconcile';
@@ -81,9 +84,25 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     expect(await addManualDonation({ centerId: centerA, itemId: itemA, amount: 40, note: 'efectivo' })).toEqual({ status: 'created' });
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 100, status: 'funded' });
 
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemA} AND source = 'manual'`;
     expect(await voidManualDonation(centerA, manual[0].id)).toBe(true);
     expect((await listPublicItems(centerA))[0]).toMatchObject({ raised: 60, status: 'active' });
+  });
+
+  it('counts only non-voided donations per item and per center', async () => {
+    const item = await createItem(centerB, { ...itemInput, name: 'donors', sortOrder: 9300 });
+    expect(await countCenterDonors(centerB)).toBe(0);
+    await recordPaypalDonation({ centerId: centerB, itemId: item, amount: '5.00', currency: 'EUR', captureId: `CAP-${suffix}-d1` });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 7, note: 'bizum' });
+    await addManualDonation({ centerId: centerB, itemId: item, amount: 3, note: 'voided' });
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(3);
+    const voided = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${item} AND note = 'voided'`;
+    expect(await voidManualDonation(centerB, voided[0].id)).toBe(true);
+    expect((await listPublicItems(centerB))[0].donorCount).toBe(2);
+    expect(await countCenterDonors(centerB)).toBe(2);
+
+    await sql`DELETE FROM donations WHERE item_id = ${item}`;
+    await sql`DELETE FROM items WHERE id = ${item}`;
   });
 
   it('credits the net donation and keeps the fee apart', async () => {
@@ -105,7 +124,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: id, amount: '20.00', currency: 'EUR', captureId: `CAP-${suffix}-refund` });
     expect(await getAdminItem(centerA, id)).toMatchObject({ raised: 20 });
     expect((await listPublicItems(centerA)).find((item) => item.id === id)).toMatchObject({ status: 'funded' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
 
     expect(await voidPaypalDonation(centerB, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     expect(await voidPaypalDonation(centerA, donation, { reason: 'reembolso', actorEmail: 'boss@example.org' })).toBe('voided');
@@ -125,7 +144,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
   it('does not let manual donations be voided as PayPal ones or carry void metadata', async () => {
     const id = await createItem(centerA, { ...itemInput, name: 'manual-only', sortOrder: 9201 });
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: '' });
-    const donation = (await sql`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
+    const donation = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`)[0].id;
     expect(await voidPaypalDonation(centerA, donation, { reason: 'x', actorEmail: 'boss@example.org' })).toBe('missing');
     await expect(sql`UPDATE donations SET void_reason = 'x' WHERE id = ${donation}`).rejects.toThrow();
 
@@ -143,7 +162,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await recordPaypalDonation({ centerId: centerA, itemId: itemTwo, amount: '7.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
     await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-foreign` });
     await addManualDonation({ centerId: centerA, itemId: itemOne, amount: 3, note: 'to void' });
-    const manual = await sql`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
+    const manual = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemOne} AND source = 'manual'`;
     await voidManualDonation(centerA, manual[0].id);
 
     const first = await listDonations(centerA, { itemId: itemOne, page: 1, pageSize: 4 });
@@ -162,6 +181,31 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
 
     await sql`DELETE FROM donations WHERE item_id IN (${itemOne}, ${itemTwo}, ${foreign})`;
     await sql`DELETE FROM items WHERE id IN (${itemOne}, ${itemTwo}, ${foreign})`;
+  });
+
+  it('exports all donations of one center and matches the dashboard to the list totals', async () => {
+    const item = await createItem(centerA, { ...itemInput, name: 'export-1', goal: 1000, sortOrder: 9100 });
+    const foreign = await createItem(centerB, { ...itemInput, name: 'export-foreign', goal: 1000 });
+    for (let n = 0; n < 7; n++) {
+      await recordPaypalDonation({ centerId: centerA, itemId: item, amount: '4.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-${n}` });
+    }
+    await recordPaypalDonation({ centerId: centerB, itemId: foreign, amount: '9.00', currency: 'EUR', captureId: `CAP-${suffix}-ex-foreign` });
+    await voidPaypalDonation(centerA, (await listDonations(centerA, { itemId: item })).rows[0].id, { reason: 'test', actorEmail: 'a@b.c' });
+
+    const exported = await listAllDonations(centerA, item);
+    expect(exported).toHaveLength(7);
+    expect(await listAllDonations(centerA, foreign)).toEqual([]);
+    expect((await listAllDonations(centerA)).some((row) => row.item_id === foreign)).toBe(false);
+
+    const list = await listDonations(centerA, { pageSize: 1000 });
+    const dashboard = await getDashboard(centerA);
+    expect(dashboard.donationCount).toBe(list.total);
+    expect(dashboard.netRaised).toBe(list.activeSum);
+    expect(dashboard.recent.length).toBeLessThanOrEqual(5);
+    expect(dashboard.items.some((entry) => entry.id === item)).toBe(true);
+
+    await sql`DELETE FROM donations WHERE item_id IN (${item}, ${foreign})`;
+    await sql`DELETE FROM items WHERE id IN (${item}, ${foreign})`;
   });
 
   it('does not count the same PayPal capture twice', async () => {
@@ -193,7 +237,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     await addManualDonation({ centerId: centerA, itemId: id, amount: 5, note: 'b' });
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 2 });
 
-    for (const row of await sql`SELECT id FROM donations WHERE item_id = ${id}`) {
+    for (const row of await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id}`) {
       await voidManualDonation(centerA, row.id);
     }
     expect(await getAdminItem(centerA, id)).toMatchObject({ donationCount: 2, blockingDonationCount: 0 });
@@ -207,7 +251,7 @@ describe.skipIf(!databaseUrl)('repositories against a real database', () => {
     const live = await createItem(centerA, { ...itemInput, name: 'one-live', sortOrder: 9101 });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 10, note: 'voided' });
     await addManualDonation({ centerId: centerA, itemId: live, amount: 5, note: 'live' });
-    const first = await sql`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
+    const first = await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${live} AND note = 'voided'`;
     await voidManualDonation(centerA, first[0].id);
     expect(await removeOrArchiveItem(centerA, live)).toBe('archived');
     expect(await getAdminItem(centerA, live)).toMatchObject({ status: 'archived', donationCount: 2, blockingDonationCount: 1 });
@@ -553,5 +597,99 @@ describe.skipIf(!databaseUrl)('reconciling PayPal captures', () => {
     const unresolved = (await listUnresolvedCaptures()).filter((row) => row.center_id === center);
     expect(unresolved.map((row) => row.paypal_order_id)).toEqual([order('approved')]);
     expect(unresolved[0].item_name).toBe('Cáliz');
+  });
+});
+
+describe.skipIf(!databaseUrl)('reordering, duplicating and batch status', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const blob = (name: string) => `https://x.public.blob.vercel-storage.com/it-ux-${suffix}/${name}.png`;
+  let center: string;
+  let other: string;
+  const input = { name: 'x', description: 'desc', goal: 80, status: 'active' as const, sortOrder: 9999, imageUrl: null };
+  const all = async (centerId = center) => listAdminItems(centerId);
+  const live = async () => (await all()).filter((item) => item.status !== 'archived').map((item) => item.name);
+  const idOf = async (name: string) => (await all()).find((item) => item.name === name)!.id;
+
+  beforeAll(async () => {
+    center = (await createCenter({ slug: `it-ux-${suffix}`, name: 'UX' }))!.id;
+    other = (await createCenter({ slug: `it-ux2-${suffix}`, name: 'UX2' }))!.id;
+    for (const name of ['a', 'b', 'c', 'd']) await createItem(center, { ...input, name });
+  });
+
+  beforeEach(() => mockDel.mockReset());
+
+  afterAll(async () => {
+    await sql`DELETE FROM items WHERE center_id IN (${center}, ${other})`;
+    await sql`DELETE FROM centers WHERE id IN (${center}, ${other})`;
+  });
+
+  it('applies a full order in one statement and renumbers from 1', async () => {
+    const [a, b, c, d] = await Promise.all(['a', 'b', 'c', 'd'].map(idOf));
+    expect(await reorderItems(center, [d, b, a, c])).toBe(4);
+    expect(await live()).toEqual(['d', 'b', 'a', 'c']);
+    expect((await all()).map((item) => item.sortOrder)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps unlisted items after the listed ones, ignores duplicates, unknown ids and other centers', async () => {
+    const foreign = await createItem(other, input);
+    const [a, b] = await Promise.all(['a', 'b'].map(idOf));
+    await reorderItems(center, [b, b, '00000000-0000-4000-8000-000000000000', foreign, a]);
+    expect(await live()).toEqual(['b', 'a', 'd', 'c']);
+    expect((await all(other))[0].sortOrder).toBe(1);
+    expect(await reorderItems(center, [])).toBe(4);
+    expect(await live()).toEqual(['b', 'a', 'd', 'c']);
+  });
+
+  it('applies batch status changes only inside the center and compacts positions', async () => {
+    const foreign = await createItem(other, input);
+    const [a, d] = await Promise.all(['a', 'd'].map(idOf));
+    expect(await setItemsStatus(center, [a, foreign], 'archive')).toBe(1);
+    expect((await getAdminItem(other, foreign))?.status).toBe('active');
+    expect(await live()).toEqual(['b', 'd', 'c']);
+    expect((await all()).filter((item) => item.status !== 'archived').map((item) => item.sortOrder)).toEqual([1, 2, 3]);
+
+    expect(await setItemsStatus(center, [d], 'hide')).toBe(1);
+    expect((await getAdminItem(center, d))?.status).toBe('draft');
+    expect(await setItemsStatus(center, [a], 'hide')).toBe(0);
+    expect(await setItemsStatus(center, [a, d], 'show')).toBe(2);
+    expect((await getAdminItem(center, a))?.status).toBe('active');
+    expect(await live()).toHaveLength(4);
+    expect(new Set((await all()).map((item) => item.sortOrder)).size).toBe(4);
+  });
+
+  it('duplicates an item as a hidden copy at the end, with its images, and never across centers', async () => {
+    const source = await createItem(center, { ...input, name: 'src', description: 'long', goal: 12.5 });
+    await addItemImage(center, source, blob('one'));
+    await addItemImage(center, source, blob('two'));
+    const copy = (await duplicateItem(center, source))!;
+    expect(copy).toBeTruthy();
+    expect(await getAdminItem(center, copy)).toMatchObject({ name: 'Copia de src', description: 'long', goal: 12.5, status: 'draft', raised: 0 });
+    expect((await live()).at(-1)).toBe('Copia de src');
+    expect((await listItemImages(center, copy)).map((image) => image.image_url)).toEqual([blob('one'), blob('two')]);
+    expect(await duplicateItem(other, source)).toBeNull();
+    expect(await duplicateItem(center, '00000000-0000-4000-8000-000000000000')).toBeNull();
+  });
+
+  it('keeps the shared files when one of the two items drops an image or is deleted', async () => {
+    const source = await createItem(center, { ...input, name: 'shared' });
+    await addItemImage(center, source, blob('s1'));
+    const copy = (await duplicateItem(center, source))!;
+
+    const [image] = await listItemImages(center, copy);
+    expect(await removeItemImage(center, copy, image.id)).toBe(true);
+    expect(mockDel).not.toHaveBeenCalled();
+
+    const again = (await duplicateItem(center, source))!;
+    expect(await removeOrArchiveItem(center, again)).toBe('deleted');
+    expect(mockDel).not.toHaveBeenCalled();
+
+    expect(await removeOrArchiveItem(center, source)).toBe('deleted');
+    expect(mockDel).toHaveBeenCalledWith([blob('s1')]);
+  });
+
+  it('copies the long names truncated to the limit', async () => {
+    const long = await createItem(center, { ...input, name: 'L'.repeat(120) });
+    const copy = (await duplicateItem(center, long))!;
+    expect((await getAdminItem(center, copy))?.name).toHaveLength(120);
   });
 });

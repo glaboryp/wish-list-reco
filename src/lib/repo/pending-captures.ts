@@ -54,18 +54,17 @@ export async function touchPendingCapture(orderId: string, lastError: string | n
 }
 
 export async function listReconcilableCaptures(olderThanMinutes: number, limit = 50): Promise<PendingCapture[]> {
-  const rows = await sql`
+  return sql<PendingCapture>`
     SELECT paypal_order_id, center_id, item_id, amount, status, attempts, last_error, created_at
     FROM pending_captures
     WHERE status = 'pending' AND created_at < NOW() - make_interval(mins => ${olderThanMinutes}::int)
     ORDER BY created_at ASC
     LIMIT ${limit}
   `;
-  return rows as PendingCapture[];
 }
 
 export async function listUnresolvedCaptures(): Promise<UnresolvedCapture[]> {
-  const rows = await sql`
+  return sql<UnresolvedCapture>`
     SELECT p.paypal_order_id, p.center_id, p.item_id, p.amount, p.status, p.attempts, p.last_error, p.created_at,
       (SELECT name FROM items WHERE id = p.item_id) AS item_name
     FROM pending_captures p
@@ -73,5 +72,4 @@ export async function listUnresolvedCaptures(): Promise<UnresolvedCapture[]> {
       OR (p.status = 'pending' AND p.created_at < NOW() - make_interval(hours => ${STALE_PENDING_HOURS}::int))
     ORDER BY p.created_at ASC
   `;
-  return rows as UnresolvedCapture[];
 }

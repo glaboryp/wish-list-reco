@@ -19,9 +19,7 @@ async function flagForReview(orderId: string, reason: string) {
     console.error('Error marcando captura para revisión', error),
   );
 }
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+import { json } from '../../../../lib/http';
 
 export const POST: APIRoute = async ({ params, request }) => {
   const center = await getCenterWithSecret(params.slug ?? '');

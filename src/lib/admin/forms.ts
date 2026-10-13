@@ -110,6 +110,23 @@ export function parseItem(form: FormData, slug: string): Parsed<ItemInput> {
   };
 }
 
+export const BATCH_ACTIONS = ['archive', 'show', 'hide'] as const;
+export type BatchActionName = (typeof BATCH_ACTIONS)[number];
+const MAX_BATCH_IDS = 200;
+
+export function parseItemIds(values: unknown[]): string[] {
+  const ids = values.map((value) => String(value).trim()).filter(isUuid);
+  return [...new Set(ids)].slice(0, MAX_BATCH_IDS);
+}
+
+export function parseBatch(form: FormData): Parsed<{ action: BatchActionName; ids: string[] }> {
+  const action = text(form, 'batch_action');
+  if (!(BATCH_ACTIONS as readonly string[]).includes(action)) return fail('La acción elegida no es válida');
+  const ids = parseItemIds(form.getAll('ids'));
+  if (ids.length === 0) return fail('Marca al menos un artículo');
+  return { ok: true, value: { action: action as BatchActionName, ids } };
+}
+
 export function parseImageUrl(form: FormData, slug: string): Parsed<string> {
   const image = blobField(form, 'image_url', slug);
   if (!image.ok || image.value === null) {
