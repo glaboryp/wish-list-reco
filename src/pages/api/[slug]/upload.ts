@@ -1,14 +1,18 @@
 import type { APIRoute } from 'astro';
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { authorizeCenter, getActor } from '../../../lib/auth/access';
+import { rateLimitRequest } from '../../../lib/rate-limit';
 import { json } from '../../../lib/http';
 
 const ALLOWED_TYPES = ['image/webp', 'image/jpeg', 'image/png'];
 const MAX_BYTES = 5 * 1024 * 1024;
 
-export const POST: APIRoute = async ({ request, params, cookies }) => {
+export const POST: APIRoute = async ({ request, params, cookies, clientAddress }) => {
   const access = await authorizeCenter(await getActor(cookies), params.slug ?? '');
   if (!access.ok) return new Response(null, { status: access.status });
+
+  const limited = await rateLimitRequest('upload', request, clientAddress, access.center.slug);
+  if (limited) return limited;
 
   try {
     const body = (await request.json()) as HandleUploadBody;

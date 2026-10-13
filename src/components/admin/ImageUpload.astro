@@ -105,6 +105,16 @@ const inputId = `upload-${name}`;
       progress.hidden = false;
       submitButtons().forEach((button) => (button.disabled = true));
 
+      const nativeFetch = window.fetch;
+      let limitedMessage = '';
+      window.fetch = async (...args) => {
+        const response = await nativeFetch(...args);
+        if (response.status === 429) {
+          limitedMessage = (await response.clone().json().catch(() => null))?.error ?? 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
+        }
+        return response;
+      };
+
       try {
         const optimized = await optimizeImage(selected);
         preview.src = URL.createObjectURL(optimized);
@@ -123,8 +133,9 @@ const inputId = `upload-${name}`;
         show('Imagen lista. Pulsa el botón de guardar para aplicarla.', 'ok');
       } catch {
         hidden.value = '';
-        show('No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
+        show(limitedMessage || 'No se pudo subir la imagen. Prueba con otra en formato JPG, PNG o WebP de menos de 5 MB.', 'error');
       } finally {
+        window.fetch = nativeFetch;
         progress.hidden = true;
         syncSubmit();
       }

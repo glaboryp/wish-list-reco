@@ -61,6 +61,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   const text = strings.join('?');
   const has = (value: string) => values.includes(value);
 
+  if (text.includes('rate_limits')) {
+    return [{ count: 1, retry_after: 1 }];
+  }
   if (text.includes('JOIN centers')) {
     return has(MANAGER_EMAIL) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
   }

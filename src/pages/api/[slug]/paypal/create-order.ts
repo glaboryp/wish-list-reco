@@ -5,11 +5,15 @@ import { createOrder, credentialsFor } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { recordPendingCapture } from '../../../../lib/repo/pending-captures';
 import { getPublicItem } from '../../../../lib/repo/items';
+import { rateLimitRequest } from '../../../../lib/rate-limit';
 import { json } from '../../../../lib/http';
 import { fromCents, remainingCents } from '../../../../lib/money';
 
-export const POST: APIRoute = async ({ params, request }) => {
+export const POST: APIRoute = async ({ params, request, clientAddress }) => {
   try {
+    const limited = await rateLimitRequest('createOrder', request, clientAddress, params.slug ?? '');
+    if (limited) return limited;
+
     const center = await getCenterWithSecret(params.slug ?? '');
     if (!center || center.status !== 'active') {
       return json({ error: 'Centro no encontrado' }, 404);
