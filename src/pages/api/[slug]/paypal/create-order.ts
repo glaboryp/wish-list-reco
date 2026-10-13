@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { DEFAULT_FEE_SCHEDULE, amountWithFees, parsePaymentSource } from '../../../../lib/fees';
 import { isUuid } from '../../../../lib/ids';
-import { createOrder, credentialsFor } from '../../../../lib/paypal';
+import { createOrder, credentialsFor, declinedPayment } from '../../../../lib/paypal';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { recordPendingCapture } from '../../../../lib/repo/pending-captures';
 import { getPublicItem } from '../../../../lib/repo/items';
@@ -76,6 +76,8 @@ export const POST: APIRoute = async ({ params, request, clientAddress }) => {
     }
     return json({ id });
   } catch (error) {
+    const declined = declinedPayment(error);
+    if (declined) return json({ error: declined.message, code: declined.code }, 422);
     console.error('Error creando orden PayPal', error);
     return json({ error: 'Error al crear la orden de pago' }, 500);
   }

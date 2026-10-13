@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 const REDUCED_CARD_SCHEDULE = { paypal: { rate: 0.029, fixed: 0.35 }, card: { rate: 0.012, fixed: 0.35 } };
-import { DEFAULT_FEE_SCHEDULE, amountWithFees, feeScheduleFromRow, parsePaymentSource } from '../../lib/fees';
+import { DEFAULT_FEE_SCHEDULE, amountWithFees, feeScheduleFromRow, normalizeDonationAmount, parsePaymentSource } from '../../lib/fees';
 
 describe('amountWithFees', () => {
   it.each([
@@ -56,5 +56,27 @@ describe('parsePaymentSource', () => {
     expect(parsePaymentSource('paypal')).toBe('paypal');
     expect(parsePaymentSource(undefined)).toBe('paypal');
     expect(parsePaymentSource('anything')).toBe('paypal');
+  });
+});
+
+describe('normalizeDonationAmount', () => {
+  it.each([
+    ['10', 10],
+    ['10.50', 10],
+    ['1.5', 1],
+    [' 25 ', 25],
+    [7.99, 7],
+    ['0.5', 0],
+    ['', 0],
+    ['abc', 0],
+    ['-3', 0],
+    [undefined, 0],
+  ])('turns %j into %d whole euros', (raw, expected) => {
+    expect(normalizeDonationAmount(raw)).toBe(expected);
+  });
+
+  it('gives the summary and the order the same amount, so the fees shown match the charge', () => {
+    const donation = normalizeDonationAmount('10.50');
+    expect(amountWithFees(donation, 'paypal')).toBe(amountWithFees(10, 'paypal'));
   });
 });

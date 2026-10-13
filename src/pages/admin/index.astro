@@ -2,20 +2,42 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import Icon from "../../components/Icon.astro";
 import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../components/admin/ui";
-import { parseNewCenter } from "../../lib/admin/forms";
+import { parseNewCenter, parseResolveCapture } from "../../lib/admin/forms";
 import { guardSuperadmin } from "../../lib/auth/guard";
+import { formatDateTime } from "../../lib/format";
+import { recordAudit } from "../../lib/repo/audit";
 import { createCenter, listCenters } from "../../lib/repo/centers";
-import { listUnresolvedCaptures } from "../../lib/repo/pending-captures";
+import { listUnresolvedCaptures, resolveCaptureManually } from "../../lib/repo/pending-captures";
 
 const guard = await guardSuperadmin(Astro);
 if (guard instanceof Response) return guard;
 const { actor } = guard;
 
+const fail = (message: string) => Astro.redirect(`/admin?error=${encodeURIComponent(message)}`, 303);
+
 if (Astro.request.method === 'POST') {
-  const parsed = parseNewCenter(await Astro.request.formData());
-  if (!parsed.ok) return Astro.redirect(`/admin?error=${encodeURIComponent(parsed.error)}`, 303);
+  const form = await Astro.request.formData();
+
+  if (form.get('intent') === 'resolve_capture') {
+    const parsed = parseResolveCapture(form);
+    if (!parsed.ok) return fail(parsed.error);
+    const resolved = await resolveCaptureManually({ ...parsed.value, actorEmail: actor.email });
+    if (!resolved) return fail('Esa orden ya estaba registrada o resuelta. Recarga la página para ver la lista actualizada');
+    await recordAudit({
+      centerId: resolved.center_id,
+      actorEmail: actor.email,
+      action: 'payment.resolve',
+      entityType: 'pending_capture',
+      entityId: parsed.value.orderId,
+      summary: `Orden de PayPal ${parsed.value.orderId} (${resolved.amount} €) marcada como resuelta: ${parsed.value.note}`,
+    });
+    return Astro.redirect('/admin?ok=capture-resolved', 303);
+  }
+
+  const parsed = parseNewCenter(form);
+  if (!parsed.ok) return fail(parsed.error);
   const created = await createCenter(parsed.value);
-  if (!created) return Astro.redirect(`/admin?error=${encodeURIComponent('Ya existe un centro con ese identificador')}`, 303);
+  if (!created) return fail('Ya existe un centro con ese identificador');
   return Astro.redirect(`/admin/centers/${created.slug}?ok=center-created`, 303);
 }
 
@@ -35,25 +57,49 @@ const host = Astro.url.host;
       <h2 id="unresolved-title" class="text-xl font-bold text-ink">
         {unresolved.length === 1 ? '1 cobro de PayPal sin registrar' : `${unresolved.length} cobros de PayPal sin registrar`}
       </h2>
-      <p class="text-base text-muted">PayPal puede haber cobrado estas órdenes pero la donación no consta en la web. Revisa cada una en PayPal y, si el cobro existe, añádela a mano en el panel del centro.</p>
+      <p class="text-base text-muted">La donación de estas órdenes no consta en la web. <strong class="text-ink">No las apuntes a mano sin más:</strong> las «Pendientes de PayPal» se vuelven a comprobar solas cada día y se registran automáticamente en cuanto PayPal confirma el cobro.</p>
+      <p class="text-base text-muted">Las que «Requieren revisión» no se registrarán solas: búscalas en PayPal por el número de orden o de cobro. Si decides apuntar la donación a mano, marca antes aquí la orden como resuelta; así el proceso diario no la registrará otra vez y no se contará dos veces.</p>
       <table class={tableClass}>
         <thead>
           <tr>
             <th class={thClass}>Centro</th>
             <th class={thClass}>Artículo</th>
             <th class={thClass}>Importe</th>
-            <th class={thClass}>Orden de PayPal</th>
+            <th class={thClass}>Estado</th>
+            <th class={thClass}>PayPal</th>
             <th class={thClass}>Fecha</th>
+            <th class={thClass}><span class="sr-only">Acciones</span></th>
           </tr>
         </thead>
         <tbody>
           {unresolved.map((capture) => (
-            <tr>
+            <tr data-order-id={capture.paypal_order_id}>
               <td class={tdClass} data-label="Centro">{centerNames.get(capture.center_id) ?? capture.center_id}</td>
               <td class={tdClass} data-label="Artículo">{capture.item_name ?? '—'}</td>
               <td class={tdClass} data-label="Importe">{capture.amount} €</td>
-              <td class={`${tdClass} font-mono text-sm`} data-label="Orden de PayPal">{capture.paypal_order_id}</td>
-              <td class={tdClass} data-label="Fecha">{new Date(capture.created_at).toLocaleString('es-ES')}</td>
+              <td class={tdClass} data-label="Estado">
+                {capture.status === 'pending'
+                  ? <span class={chipClass.info}>Pendiente de PayPal</span>
+                  : <span class={chipClass.warn}>Requiere revisión</span>}
+                {capture.last_error && <span class="mt-1 block text-sm text-muted">{capture.last_error}</span>}
+              </td>
+              <td class={`${tdClass} font-mono text-sm`} data-label="PayPal">
+                <span class="block">Orden {capture.paypal_order_id}</span>
+                {capture.paypal_capture_id && <span class="block">Cobro {capture.paypal_capture_id}</span>}
+              </td>
+              <td class={tdClass} data-label="Fecha">{formatDateTime(capture.created_at)}</td>
+              <td class="py-2 text-right">
+                <details class="text-left">
+                  <summary class="inline-flex min-h-11 cursor-pointer items-center font-semibold text-brand underline-offset-4 hover:underline">Marcar como resuelta</summary>
+                  <form method="post" class="mt-2 space-y-2" data-confirm="¿Marcar esta orden como resuelta? El proceso diario dejará de registrarla aunque PayPal confirme el cobro.">
+                    <input type="hidden" name="intent" value="resolve_capture" />
+                    <input type="hidden" name="order_id" value={capture.paypal_order_id} />
+                    <label class="sr-only" for={`note-${capture.paypal_order_id}`}>Qué has comprobado</label>
+                    <input id={`note-${capture.paypal_order_id}`} name="note" class={inputClass} placeholder="Por ejemplo: apuntada a mano / no hubo cobro" minlength="3" maxlength="200" required />
+                    <button type="submit" class={`${secondaryButtonClass} px-4!`}>Marcar como resuelta</button>
+                  </form>
+                </details>
+              </td>
             </tr>
           ))}
         </tbody>

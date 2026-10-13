@@ -110,6 +110,11 @@ const presets = [5, 10, 25, 50].filter((value) => value < maxDonation);
   </p>
 </div>
 
+<div id={`${buttonId}-processing`} class="hidden space-y-3 text-center" role="status" data-testid="donation-processing">
+  <h3 class="text-2xl font-bold text-ink">Tu pago se está procesando</h3>
+  <p data-processing-message class="text-base text-ink/90"></p>
+</div>
+
 <div id={`${buttonId}-thanks`} class="thanks relative hidden space-y-4 text-center" role="status">
   <div class="confetti" aria-hidden="true">
     {Array.from({ length: 12 }, (_, i) => <span style={`--i: ${i};`}></span>)}

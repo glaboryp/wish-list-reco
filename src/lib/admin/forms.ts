@@ -210,3 +210,17 @@ export function parseNewCenter(form: FormData): Parsed<{ slug: string; name: str
 
   return { ok: true, value: { slug, name } };
 }
+
+const PAYPAL_ORDER_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+
+export function parseResolveCapture(form: FormData): Parsed<{ orderId: string; note: string }> {
+  const orderId = text(form, 'order_id');
+  if (!PAYPAL_ORDER_ID_PATTERN.test(orderId)) return fail('No se encontró esa orden de PayPal');
+
+  const note = text(form, 'note');
+  if (note.length < 3 || note.length > 200) {
+    return fail('Escribe qué has comprobado (entre 3 y 200 caracteres), por ejemplo «añadida a mano el 12/10» o «no hubo cobro en PayPal»');
+  }
+
+  return { ok: true, value: { orderId, note } };
+}

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encryptSecret } from '../../lib/crypto';
-import { apiBase, captureOrder, clearTokenCache, lookupCaptureRefund, lookupOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError } from '../../lib/paypal';
+import { apiBase, captureOrder, clearTokenCache, declinedPayment, lookupCaptureRefund, lookupOrder, createOrder, credentialsFor, customIdFor, parseCustomId, PayPalError, type CaptureResult, type CaptureState } from '../../lib/paypal';
+
+const captured = async (state: Promise<CaptureState>): Promise<CaptureResult> => {
+  const result = await state;
+  if (result.state !== 'completed') throw new Error(`expected a completed capture, got ${result.state}`);
+  return result.capture;
+};
 import type { CenterWithSecret } from '../../types/database';
 
 const key = Buffer.alloc(32, 1).toString('base64');
@@ -81,14 +87,14 @@ describe('createOrder', () => {
 describe('captureOrder payer email', () => {
   it('reads the payer email from the capture response', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'T' })).mockResolvedValueOnce(ok({ ...completed, payer: { email_address: 'donor@example.org' } }));
-    expect((await captureOrder(creds, 'ORDER-1')).payerEmail).toBe('donor@example.org');
+    expect((await captured(captureOrder(creds, 'ORDER-1'))).payerEmail).toBe('donor@example.org');
   });
 });
 
 describe('captureOrder', () => {
   it('returns the capture details', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(completed));
-    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: null });
+    expect(await captured(captureOrder(creds, 'ORDER-1'))).toEqual({ captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: null });
   });
 
   it('recovers an already captured order by reading it back', async () => {
@@ -96,7 +102,7 @@ describe('captureOrder', () => {
       .mockResolvedValueOnce(ok({ access_token: 'tok' }))
       .mockResolvedValueOnce(fail(422, { details: [{ issue: 'ORDER_ALREADY_CAPTURED' }] }))
       .mockResolvedValueOnce(ok(completed));
-    const result = await captureOrder(creds, 'ORDER-1');
+    const result = await captured(captureOrder(creds, 'ORDER-1'));
     expect(result.captureId).toBe('CAP1');
     expect(fetchMock.mock.calls[2][0]).toBe('https://api-m.sandbox.paypal.com/v2/checkout/orders/ORDER-1');
   });
@@ -143,18 +149,38 @@ describe('captureOrder', () => {
       ],
     };
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(multiCapture));
-    const result = await captureOrder(creds, 'ORDER-1');
+    const result = await captured(captureOrder(creds, 'ORDER-1'));
     expect(result.captureId).toBe('CAP2');
     expect(result.amount).toBe('12.00');
   });
 
-  it('throws when the order is completed but no capture is COMPLETED', async () => {
-    const pending = {
-      status: 'COMPLETED',
-      purchase_units: [{ payments: { captures: [{ id: 'CAP1', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' }, status: 'PENDING' }] } }],
-    };
-    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(pending));
+  const withCapture = (status: string) => ({
+    status: 'COMPLETED',
+    purchase_units: [{ payments: { captures: [{ id: 'CAP1', custom_id: 'item-1', amount: { value: '12.00', currency_code: 'EUR' }, status }] } }],
+  });
+
+  it('reports a capture PayPal is still processing instead of failing', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(withCapture('PENDING')));
+    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ state: 'capture_pending', captureId: 'CAP1' });
+  });
+
+  it.each(['REFUNDED', 'DECLINED', 'FAILED', 'PARTIALLY_REFUNDED'])('reports a %s capture as not credited', async (status) => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(withCapture(status)));
+    expect(await captureOrder(creds, 'ORDER-1')).toEqual({ state: 'capture_failed', captureId: 'CAP1', status });
+  });
+
+  it('throws when a completed order has no capture at all', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok({ status: 'COMPLETED', purchase_units: [{}] }));
     await expect(captureOrder(creds, 'ORDER-1')).rejects.toThrow('incomplete capture data');
+  });
+
+  it('keeps the PayPal issue of a declined capture', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ok({ access_token: 'tok' }))
+      .mockResolvedValueOnce(fail(422, { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'INSTRUMENT_DECLINED' }] }));
+    const error = await captureOrder(creds, 'ORDER-1').catch((e) => e);
+    expect(error).toBeInstanceOf(PayPalError);
+    expect(error).toMatchObject({ status: 422, issue: 'INSTRUMENT_DECLINED' });
   });
 });
 
@@ -190,7 +216,7 @@ describe('custom id with the donation amount', () => {
         purchase_units: [{ payments: { captures: [{ id: 'CAP9', custom_id: 'item-1:10.00', amount: { value: '10.66', currency_code: 'EUR' }, status: 'COMPLETED' }] } }],
       }),
     );
-    expect(await captureOrder(creds, 'ORDER-9')).toMatchObject({ itemId: 'item-1', amount: '10.66', donationAmount: '10.00' });
+    expect(await captured(captureOrder(creds, 'ORDER-9'))).toMatchObject({ itemId: 'item-1', amount: '10.66', donationAmount: '10.00' });
   });
 });
 
@@ -243,6 +269,12 @@ describe('lookupOrder', () => {
     });
   });
 
+  it('reports a completed order whose capture PayPal is still processing', async () => {
+    const pending = { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP1', status: 'PENDING' }] } }] };
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok(pending));
+    expect(await lookupOrder(creds, 'ORDER-1')).toEqual({ state: 'capture_pending', captureId: 'CAP1' });
+  });
+
   it('reports the status of an order that is not completed', async () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(ok({ status: 'APPROVED' }));
     expect(await lookupOrder(creds, 'ORDER-1')).toEqual({ state: 'not_completed', status: 'APPROVED' });
@@ -275,5 +307,23 @@ describe('lookupCaptureRefund', () => {
   it('queries the capture endpoint and throws on other failures', async () => {
     await expect(lookup(fail(500, {}))).rejects.toBeInstanceOf(PayPalError);
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/v2/payments/captures/CAP1');
+  });
+});
+
+describe('declinedPayment', () => {
+  it.each(['INSTRUMENT_DECLINED', 'TRANSACTION_REFUSED', 'PAYER_CANNOT_PAY', 'CARD_EXPIRED', 'PAYER_ACTION_REQUIRED'])(
+    'maps %s to a message that lets the donor try another payment method',
+    (issue) => {
+      expect(declinedPayment(new PayPalError('capture failed', 422, issue))).toEqual({
+        code: issue,
+        message: expect.stringContaining('otra forma de pago'),
+      });
+    },
+  );
+
+  it('ignores other PayPal errors and non-PayPal errors', () => {
+    expect(declinedPayment(new PayPalError('capture failed', 500, 'INTERNAL_SERVER_ERROR'))).toBeNull();
+    expect(declinedPayment(new PayPalError('capture failed', 422))).toBeNull();
+    expect(declinedPayment(new Error('INSTRUMENT_DECLINED'))).toBeNull();
   });
 });
