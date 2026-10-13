@@ -29,7 +29,7 @@ export async function listAudit(
 ): Promise<{ rows: AuditEntry[]; total: number }> {
   const offset = (Math.max(1, page) - 1) * AUDIT_PAGE_SIZE;
   const [rows, count] = await Promise.all([
-    sql`
+    sql<AuditEntry>`
       SELECT id, center_id, actor_email, action, entity_type, entity_id, summary, created_at
       FROM audit_log WHERE center_id = ${centerId}
       ORDER BY created_at DESC, id DESC
@@ -37,5 +37,5 @@ export async function listAudit(
     `,
     sql`SELECT COUNT(*) AS total FROM audit_log WHERE center_id = ${centerId}`,
   ]);
-  return { rows: rows as AuditEntry[], total: Number(count[0]?.total ?? 0) };
+  return { rows, total: Number(count[0]?.total ?? 0) };
 }

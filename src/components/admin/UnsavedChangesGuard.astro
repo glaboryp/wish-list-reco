@@ -1,0 +1,43 @@
+<script>
+  const MESSAGE = 'Tienes cambios sin guardar. Si sales ahora, se perderán. ¿Salir de todos modos?';
+  const forms = Array.from(document.querySelectorAll<HTMLFormElement>('form[data-guard]'));
+
+  if (forms.length > 0) {
+    const serialize = (form: HTMLFormElement) =>
+      JSON.stringify(Array.from(new FormData(form).entries(), ([key, value]) => [key, typeof value === 'string' ? value : value.name]));
+    const initial = new Map(forms.map((form) => [form, serialize(form)]));
+    let submitting = false;
+
+    const isDirty = () => !submitting && forms.some((form) => serialize(form) !== initial.get(form));
+
+    window.addEventListener('beforeunload', (event) => {
+      if (!isDirty()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+
+    document.addEventListener('click', (event) => {
+      if (event.defaultPrevented || !isDirty()) return;
+      const link = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+      if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+      const href = link.getAttribute('href') ?? '';
+      if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+      if (!confirm(MESSAGE)) event.preventDefault();
+      else submitting = true;
+    });
+
+    document.addEventListener('submit', (event) => {
+      const form = event.target as HTMLFormElement;
+      if (event.defaultPrevented) return;
+      if (forms.includes(form)) {
+        submitting = true;
+        return;
+      }
+      if (!isDirty()) return;
+      if (!confirm(MESSAGE)) event.preventDefault();
+      else submitting = true;
+    });
+
+    window.addEventListener('pageshow', () => (submitting = false));
+  }
+</script>

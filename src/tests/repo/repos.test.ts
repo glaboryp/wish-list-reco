@@ -5,7 +5,7 @@ const { mockSql } = vi.hoisted(() => ({ mockSql: vi.fn() }));
 vi.mock('../../lib/db', () => ({ default: mockSql }));
 
 import { getCenterBySlug, getCenterWithSecret, listCenters } from '../../lib/repo/centers';
-import { recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { getDashboard, listAllDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
 import { removeOrArchiveItem } from '../../lib/repo/items';
 import { removeCenterUser } from '../../lib/repo/users';
 
@@ -80,6 +80,8 @@ describe('donations repository', () => {
     expect(await voidPaypalDonation('c', 'd1', input)).toBe('already_voided');
     mockSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     expect(await voidPaypalDonation('c', 'd2', input)).toBe('missing');
+    mockSql.mockResolvedValueOnce([{ id: 'd3' }]);
+    expect(await voidPaypalDonation('c', 'd3', { reason: 'x', actorEmail: null })).toBe('voided');
   });
 });
 
@@ -120,4 +122,23 @@ describe('users repository', () => {
     const sqlText = mockSql.mock.calls[0][0].join('?');
     expect(sqlText).not.toContain('count(*)');
   });
+});
+
+describe('donations export and dashboard queries', () => {
+    beforeEach(() => mockSql.mockReset());
+
+    it('exports every donation of the center without a limit', async () => {
+        mockSql.mockResolvedValue([{ id: 'd1' }]);
+        expect(await listAllDonations('c1', null)).toEqual([{ id: 'd1' }]);
+        expect(mockSql.mock.calls[0][0].join('?')).not.toMatch(/LIMIT/);
+        expect(mockSql.mock.calls[0].slice(1)).toContain('c1');
+    });
+
+    it('builds the dashboard from the donations total and the items', async () => {
+        mockSql
+            .mockResolvedValueOnce([{ id: 'd1' }])
+            .mockResolvedValueOnce([{ total: '3', active_sum: '12.50' }])
+            .mockResolvedValueOnce([]);
+        expect(await getDashboard('c1')).toEqual({ netRaised: 12.5, donationCount: 3, recent: [{ id: 'd1' }], items: [] });
+    });
 });

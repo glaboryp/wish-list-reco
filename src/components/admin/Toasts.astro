@@ -1,0 +1,68 @@
+---
+import Icon from "../Icon.astro";
+
+interface Props {
+  ok?: string | null;
+  error?: string | null;
+}
+
+const { ok = null, error = null } = Astro.props;
+---
+
+{(ok || error) && (
+  <div class="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-96" data-toasts>
+    {ok && (
+      <div role="status" data-toast data-autodismiss class="pointer-events-auto flex items-start gap-3 rounded-lg bg-green-50 px-4 py-3 text-base text-green-900 shadow-lift ring-1 ring-green-200">
+        <Icon name="check-circle" class="mt-0.5 h-5 w-5 shrink-0" />
+        <p class="flex-1">{ok}</p>
+        <button type="button" data-dismiss class="-m-1 inline-flex h-9 w-9 items-center justify-center rounded hover:bg-green-100">
+          <span class="sr-only">Cerrar aviso</span>
+          <Icon name="x" class="h-5 w-5" />
+        </button>
+      </div>
+    )}
+    {error && (
+      <div role="alert" data-toast class="pointer-events-auto flex items-start gap-3 rounded-lg bg-red-50 px-4 py-3 text-base text-red-900 shadow-lift ring-1 ring-red-200">
+        <Icon name="warning-circle" class="mt-0.5 h-5 w-5 shrink-0" />
+        <p class="flex-1">{error}</p>
+        <button type="button" data-dismiss class="-m-1 inline-flex h-9 w-9 items-center justify-center rounded hover:bg-red-100">
+          <span class="sr-only">Cerrar aviso</span>
+          <Icon name="x" class="h-5 w-5" />
+        </button>
+      </div>
+    )}
+  </div>
+)}
+
+<script>
+  const AUTODISMISS_MS = 8000;
+
+  const url = new URL(window.location.href);
+  if (url.searchParams.has('ok') || url.searchParams.has('error')) {
+    url.searchParams.delete('ok');
+    url.searchParams.delete('error');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-toast]').forEach((toast) => {
+    const dismiss = () => {
+      const container = toast.parentElement;
+      toast.remove();
+      if (container && container.children.length === 0) container.remove();
+    };
+    toast.querySelector('[data-dismiss]')?.addEventListener('click', dismiss);
+    if (!toast.hasAttribute('data-autodismiss')) return;
+
+    let timer: number | undefined;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(dismiss, AUTODISMISS_MS);
+    };
+    const hold = () => window.clearTimeout(timer);
+    toast.addEventListener('mouseenter', hold);
+    toast.addEventListener('mouseleave', arm);
+    toast.addEventListener('focusin', hold);
+    toast.addEventListener('focusout', arm);
+    arm();
+  });
+</script>

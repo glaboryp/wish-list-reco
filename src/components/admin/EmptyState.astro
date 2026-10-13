@@ -1,0 +1,21 @@
+---
+import { buttonClass, secondaryButtonClass } from "./ui";
+
+interface Props {
+  title: string;
+  text: string;
+  actionLabel?: string;
+  actionHref?: string;
+  secondary?: boolean;
+}
+
+const { title, text, actionLabel, actionHref, secondary = false } = Astro.props;
+---
+
+<div class="rounded-lg border border-dashed border-line-strong bg-surface px-5 py-8 text-center" data-empty-state>
+  <p class="text-lg font-bold text-ink">{title}</p>
+  <p class="mx-auto mt-1 max-w-md text-base text-muted">{text}</p>
+  {actionLabel && actionHref && (
+    <a href={actionHref} class={`${secondary ? secondaryButtonClass : buttonClass} mt-4`}>{actionLabel}</a>
+  )}
+</div>

@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getCenterWithSecret, getPublicItem, credentialsFor, createOrder } = vi.hoisted(() => ({
+const { getCenterWithSecret, getPublicItem, credentialsFor, createOrder, recordPendingCapture, rateLimitRequest } = vi.hoisted(() => ({
+  rateLimitRequest: vi.fn(),
   getCenterWithSecret: vi.fn(),
   getPublicItem: vi.fn(),
   credentialsFor: vi.fn(),
   createOrder: vi.fn(),
+  recordPendingCapture: vi.fn(),
 }));
 
 vi.mock('../../lib/repo/centers', () => ({ getCenterWithSecret }));
 vi.mock('../../lib/repo/items', () => ({ getPublicItem }));
+vi.mock('../../lib/rate-limit', () => ({ rateLimitRequest }));
+vi.mock('../../lib/repo/pending-captures', () => ({ recordPendingCapture }));
 vi.mock('../../lib/paypal', () => ({ credentialsFor, createOrder }));
 
 import { POST } from '../../pages/api/[slug]/paypal/create-order';
@@ -29,9 +33,18 @@ beforeEach(() => {
   getPublicItem.mockResolvedValue(item);
   credentialsFor.mockReturnValue({ clientId: 'cid', clientSecret: 's', env: 'sandbox' });
   createOrder.mockResolvedValue('ORDER-123');
+  rateLimitRequest.mockResolvedValue(null);
+  recordPendingCapture.mockResolvedValue(undefined);
 });
 
 describe('POST /api/[slug]/paypal/create-order', () => {
+  it('returns 429 without touching the center or PayPal when rate limited', async () => {
+    rateLimitRequest.mockResolvedValue(new Response('{"error":"x"}', { status: 429 }));
+    expect((await call({ itemId: ITEM_ID, amount: 10 })).status).toBe(429);
+    expect(getCenterWithSecret).not.toHaveBeenCalled();
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+
   it('returns 404 for an unknown center', async () => {
     getCenterWithSecret.mockResolvedValue(null);
     expect((await call({ itemId: ITEM_ID, amount: 10 })).status).toBe(404);
@@ -139,5 +152,17 @@ describe('POST /api/[slug]/paypal/create-order', () => {
   it('returns 500 when PayPal fails', async () => {
     createOrder.mockRejectedValue(new Error('boom'));
     expect((await call({ itemId: ITEM_ID, amount: 10 })).status).toBe(500);
+  });
+
+  it('records the order as pending so it can be reconciled later', async () => {
+    await call({ itemId: ITEM_ID, amount: 10 });
+    expect(recordPendingCapture).toHaveBeenCalledWith({ orderId: 'ORDER-123', centerId: 'c1', itemId: ITEM_ID, amount: '10.00' });
+  });
+
+  it('still returns the order id if the pending record cannot be saved', async () => {
+    recordPendingCapture.mockRejectedValue(new Error('db down'));
+    const response = await call({ itemId: ITEM_ID, amount: 10 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: 'ORDER-123' });
   });
 });

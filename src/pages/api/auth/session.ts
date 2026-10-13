@@ -4,9 +4,7 @@ import { verifyFirebaseIdToken } from '../../../lib/auth/firebase';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from '../../../lib/auth/session';
 import { getSessionVersion } from '../../../lib/repo/sessions';
 import { linkFirebaseUid, listMembershipsByEmail } from '../../../lib/repo/users';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+import { json } from '../../../lib/http';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   let idToken: unknown;

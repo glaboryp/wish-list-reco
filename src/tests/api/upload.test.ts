@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { handleUpload, authorizeCenter, getActor } = vi.hoisted(() => ({
+const { handleUpload, authorizeCenter, getActor, rateLimitRequest } = vi.hoisted(() => ({
+  rateLimitRequest: vi.fn(),
   handleUpload: vi.fn(),
   authorizeCenter: vi.fn(),
   getActor: vi.fn(),
 }));
 
 vi.mock('@vercel/blob/client', () => ({ handleUpload }));
+vi.mock('../../lib/rate-limit', () => ({ rateLimitRequest }));
 vi.mock('../../lib/auth/access', () => ({ authorizeCenter, getActor }));
 
 import { POST } from '../../pages/api/[slug]/upload';
@@ -22,10 +24,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   getActor.mockResolvedValue({ email: 'ana@example.org', uid: 'u1', isSuperadmin: false });
   authorizeCenter.mockResolvedValue({ ok: true, center: { slug: 'recoletos' } });
+  rateLimitRequest.mockResolvedValue(null);
   handleUpload.mockResolvedValue({ type: 'blob.generate-client-token', clientToken: 'tok' });
 });
 
 describe('POST /api/[slug]/upload', () => {
+  it('returns 429 without issuing a token when rate limited', async () => {
+    rateLimitRequest.mockResolvedValue(new Response('{"error":"x"}', { status: 429 }));
+    expect((await call()).status).toBe(429);
+    expect(handleUpload).not.toHaveBeenCalled();
+  });
+
   it.each([401, 403, 404])('passes through the authorization status %s', async (status) => {
     authorizeCenter.mockResolvedValue({ ok: false, status });
     expect((await call()).status).toBe(status);
