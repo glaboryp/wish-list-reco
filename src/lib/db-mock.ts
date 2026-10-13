@@ -10,6 +10,7 @@ const baseCenter = {
   hero_image_url: null,
   logo_url: null,
   primary_color: '#007986',
+  notify_mode: 'each',
   paypal_client_id: 'test',
   paypal_secret_encrypted: 'v1:a:b:c',
   paypal_env: 'sandbox',

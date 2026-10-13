@@ -29,6 +29,7 @@ Copia `.env.example` a `.env` y rellénalo:
 | `PRODUCTION_DB_HOST`, `ALLOW_REMOTE_DB_RESET` | Guardia de `db:seed`/`db:reset` (ver Desarrollo local) |
 | `BLOB_READ_WRITE_TOKEN` | Subida de imágenes |
 | `ENCRYPTION_KEY` | Clave de cifrado de los secrets de PayPal (`openssl rand -base64 32`) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Avisos por correo de las donaciones con [Resend](https://resend.com) (remitente verificado). Opcionales: si faltan, no se envía ningún correo |
 | `SESSION_SECRET` | Firma de la cookie de sesión (`openssl rand -base64 48`) |
 | `SUPERADMIN_EMAIL` | Único superadmin |
 | `CRON_SECRET` | Protege `/api/cron/paypal-sync`, que Vercel Cron llama a diario (`openssl rand -base64 32`). Debe estar definida en Vercel |

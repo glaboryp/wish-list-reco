@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder, lookupOrder, resolvePendingCapture } = vi.hoisted(() => ({
+const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder, lookupOrder, resolvePendingCapture, notifyDonation } = vi.hoisted(() => ({
+  notifyDonation: vi.fn(),
   getCenterWithSecret: vi.fn(),
   recordPaypalDonation: vi.fn(),
   credentialsFor: vi.fn(),
@@ -11,12 +12,13 @@ const { getCenterWithSecret, recordPaypalDonation, credentialsFor, captureOrder,
 
 vi.mock('../../lib/repo/centers', () => ({ getCenterWithSecret }));
 vi.mock('../../lib/repo/donations', () => ({ recordPaypalDonation }));
+vi.mock('../../lib/email/notify', () => ({ notifyDonation }));
 vi.mock('../../lib/paypal', () => ({ credentialsFor, captureOrder, lookupOrder }));
 vi.mock('../../lib/repo/pending-captures', () => ({ resolvePendingCapture }));
 
 import { POST } from '../../pages/api/[slug]/paypal/capture-order';
 
-const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null };
+const capture = { captureId: 'CAP1', amount: '12.00', currency: 'EUR', itemId: 'item-1', donationAmount: null, payerEmail: 'donor@example.org' };
 const center = { id: 'c1', slug: 'recoletos', status: 'active' };
 
 const call = (body: unknown, slug = 'recoletos') =>
@@ -75,6 +77,15 @@ describe('POST /api/[slug]/paypal/capture-order', () => {
     const response = await call({ orderID: 'O1' });
     expect(await response.json()).toMatchObject({ ok: true, amount: '10.00', chargedAmount: '10.66' });
     expect(recordPaypalDonation).toHaveBeenCalledWith(expect.objectContaining({ amount: '10.00', feeAmount: '0.66' }));
+  });
+
+  it('notifies after a new donation with the payer email, and not on duplicates', async () => {
+    await call({ orderID: 'O1' });
+    expect(notifyDonation).toHaveBeenCalledWith({ center, itemId: 'item-1', amount: '12.00', donorEmail: 'donor@example.org' });
+    notifyDonation.mockClear();
+    recordPaypalDonation.mockResolvedValue('duplicate');
+    await call({ orderID: 'O1' });
+    expect(notifyDonation).not.toHaveBeenCalled();
   });
 
   it('is idempotent when the capture was already recorded', async () => {

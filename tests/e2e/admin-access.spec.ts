@@ -209,6 +209,18 @@ test.describe('donations panel', () => {
     });
 });
 
+test.describe('email notifications setting', () => {
+    test('a manager sees the options and can save them', async ({ page, context }) => {
+        await signIn(context, 'manager@example.org');
+        await page.goto('/recoletos/admin/users');
+        await expect(page.getByRole('heading', { name: 'Avisos por correo' })).toBeVisible();
+        await expect(page.getByLabel('Avisarme con cada donación')).toBeChecked();
+        await page.getByLabel('No avisar').check();
+        await page.getByRole('button', { name: 'Guardar avisos' }).click();
+        await expect(page.getByRole('status')).toContainText('Avisos por correo guardados');
+    });
+});
+
 test.describe('admin dashboard', () => {
     test('summarizes the campaign with the same totals as the donations list', async ({ page, context }) => {
         await signIn(context, 'manager@example.org');

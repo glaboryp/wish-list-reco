@@ -13,6 +13,7 @@ export interface CaptureResult {
   currency: string;
   itemId: string;
   donationAmount: string | null;
+  payerEmail: string | null;
 }
 
 export class PayPalError extends Error {
@@ -150,6 +151,7 @@ function completedCapture(data: any): CaptureResult {
     currency: capture.amount.currency_code,
     itemId,
     donationAmount,
+    payerEmail: typeof data.payer?.email_address === 'string' ? data.payer.email_address : null,
   };
 }
 

@@ -2,6 +2,7 @@ import type { FeeSchedule } from '../lib/fees';
 
 export type ItemStatus = 'draft' | 'active' | 'funded' | 'archived';
 export type CenterStatus = 'active' | 'disabled';
+export type NotifyMode = 'each' | 'daily' | 'none';
 export type PayPalEnv = 'sandbox' | 'live';
 
 export interface Center {
@@ -18,6 +19,7 @@ export interface Center {
   paypal_env: PayPalEnv;
   paypal_configured: boolean;
   fees: FeeSchedule;
+  notify_mode: NotifyMode;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +29,10 @@ export interface FeeSettingsInput {
   paypalFixed: number;
   cardPercent: number;
   cardFixed: number;
+}
+
+export interface NotifySettingsInput {
+  mode: NotifyMode;
 }
 
 export interface CenterWithSecret extends Center {

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { captureOrder, credentialsFor, lookupOrder, type CaptureResult } from '../../../../lib/paypal';
 import { recordCapture } from '../../../../lib/paypal-reconcile';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
+import { notifyDonation } from '../../../../lib/email/notify';
 import { resolvePendingCapture } from '../../../../lib/repo/pending-captures';
 
 async function recoverCapture(credentials: Parameters<typeof lookupOrder>[0], orderId: string): Promise<CaptureResult | null> {
@@ -80,6 +81,10 @@ export const POST: APIRoute = async ({ params, request }) => {
   await resolvePendingCapture(orderID, 'recorded').catch((error) => console.error('Error cerrando captura pendiente', error));
 
   const creditedAmount = capture.donationAmount ?? capture.amount;
+
+  if (outcome === 'created') {
+    await notifyDonation({ center, itemId: capture.itemId, amount: creditedAmount, donorEmail: capture.payerEmail });
+  }
 
   return json({
     ok: true,
