@@ -19,7 +19,7 @@ test('Donation flow', async ({ page }) => {
 
     await items.first().locator('a[href^="/recoletos/item/"]').first().click();
 
-    await expect(page.url()).toContain('/recoletos/item/');
+    expect(page.url()).toContain('/recoletos/item/');
     await expect(page.locator('h1')).toBeVisible();
 
     const amountInput = page.locator('input[name="amount"]');

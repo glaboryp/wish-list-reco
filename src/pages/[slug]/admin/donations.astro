@@ -7,6 +7,7 @@ import { countedAmount, fromCents, remainingCents } from "../../../lib/money";
 import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { recordAudit } from "../../../lib/repo/audit";
+import { forbiddenPage } from "../../../lib/error-pages";
 import { isUuid } from "../../../lib/ids";
 import { addManualDonation, DONATIONS_PAGE_SIZE, listDonations, voidManualDonation, voidPaypalDonation } from "../../../lib/repo/donations";
 import { listAdminItems } from "../../../lib/repo/items";
@@ -23,7 +24,7 @@ if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
 
   if (form.get('intent') === 'void_paypal') {
-    if (!actor.isSuperadmin) return new Response('No tienes acceso a esta acción', { status: 403 });
+    if (!actor.isSuperadmin) return forbiddenPage();
     const parsed = parseVoidDonation(form);
     if (!parsed.ok) return fail(parsed.error);
     const outcome = await voidPaypalDonation(center.id, parsed.value.donationId, { reason: parsed.value.reason, actorEmail: actor.email });

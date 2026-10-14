@@ -2,7 +2,7 @@ import type { FeeSchedule } from '../lib/fees';
 
 export type ItemStatus = 'draft' | 'active' | 'funded' | 'archived';
 export type CenterStatus = 'active' | 'disabled';
-export type NotifyMode = 'each' | 'daily' | 'none';
+export type NotifyMode = 'each' | 'none';
 export type PayPalEnv = 'sandbox' | 'live';
 
 export interface Center {

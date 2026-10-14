@@ -1,11 +1,9 @@
 import type { APIRoute } from 'astro';
 import { parseItemIds } from '../../../../lib/admin/forms';
 import { authorizeCenter, getActor } from '../../../../lib/auth/access';
+import { json } from '../../../../lib/http';
 import { recordAudit } from '../../../../lib/repo/audit';
 import { reorderItems } from '../../../../lib/repo/items';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 export const POST: APIRoute = async ({ request, params, cookies }) => {
   const access = await authorizeCenter(await getActor(cookies), params.slug ?? '');

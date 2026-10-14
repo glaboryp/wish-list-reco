@@ -11,7 +11,15 @@ import type {
   PayPalSettingsInput,
 } from '../../types/database';
 
-function toCenter(row: any): Center {
+type CenterRow = Omit<Center, 'paypal_configured' | 'fees'> & {
+  paypal_secret_encrypted: string | null;
+  paypal_fee_percent: string | number;
+  paypal_fee_fixed: string | number;
+  card_fee_percent: string | number;
+  card_fee_fixed: string | number;
+};
+
+function toCenter(row: CenterRow): Center {
   const {
     paypal_secret_encrypted,
     paypal_fee_percent,
@@ -28,41 +36,41 @@ function toCenter(row: any): Center {
 }
 
 export async function listCenters(): Promise<Center[]> {
-  const rows = await sql`SELECT * FROM centers ORDER BY name ASC`;
+  const rows = await sql<CenterRow>`SELECT * FROM centers ORDER BY name ASC`;
   return rows.map(toCenter);
 }
 
 export async function listActiveCenters(): Promise<Center[]> {
-  const rows = await sql`SELECT * FROM centers WHERE status = 'active' ORDER BY name ASC`;
+  const rows = await sql<CenterRow>`SELECT * FROM centers WHERE status = 'active' ORDER BY name ASC`;
   return rows.map(toCenter);
 }
 
 export async function getCenterBySlug(slug: string): Promise<Center | null> {
-  const rows = await sql`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sql<CenterRow>`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
   return rows.length > 0 ? toCenter(rows[0]) : null;
 }
 
 export async function getCenterWithSecret(slug: string): Promise<CenterWithSecret | null> {
-  const rows = await sql<{ paypal_secret_encrypted: string | null }>`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sql<CenterRow>`SELECT * FROM centers WHERE slug = ${slug} LIMIT 1`;
   if (rows.length === 0) return null;
   return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
 }
 
 export async function getCenterWithSecretById(id: string): Promise<CenterWithSecret | null> {
-  const rows = await sql`SELECT * FROM centers WHERE id = ${id} LIMIT 1`;
+  const rows = await sql<CenterRow>`SELECT * FROM centers WHERE id = ${id} LIMIT 1`;
   if (rows.length === 0) return null;
-  return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted as string | null };
+  return { ...toCenter(rows[0]), paypal_secret_encrypted: rows[0].paypal_secret_encrypted };
 }
 
 export async function listCentersWithPaypal(): Promise<CenterWithSecret[]> {
-  const rows = await sql`
+  const rows = await sql<CenterRow>`
     SELECT * FROM centers WHERE paypal_client_id IS NOT NULL AND paypal_secret_encrypted IS NOT NULL ORDER BY name ASC
   `;
-  return rows.map((row: any) => ({ ...toCenter(row), paypal_secret_encrypted: row.paypal_secret_encrypted }));
+  return rows.map((row) => ({ ...toCenter(row), paypal_secret_encrypted: row.paypal_secret_encrypted }));
 }
 
 export async function createCenter(input: { slug: string; name: string }): Promise<Center | null> {
-  const rows = await sql`
+  const rows = await sql<CenterRow>`
     INSERT INTO centers (slug, name, hero_title)
     VALUES (${input.slug}, ${input.name}, ${input.name})
     ON CONFLICT (slug) DO NOTHING
