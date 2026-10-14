@@ -27,8 +27,45 @@ export class PayPalError extends Error {
   }
 }
 
-const issueOf = (data: any): string | undefined => {
-  const issue = data?.details?.[0]?.issue ?? data?.name;
+interface PayPalAmount {
+  value?: string;
+  currency_code: string;
+}
+
+interface PayPalLink {
+  rel?: string;
+  href?: string;
+}
+
+interface PayPalCapture {
+  id?: string;
+  status?: string;
+  custom_id?: string;
+  amount?: PayPalAmount;
+  links?: unknown;
+}
+
+interface PayPalRefund {
+  status?: string;
+  amount?: PayPalAmount;
+  links?: unknown;
+}
+
+interface PayPalResponse {
+  id?: string;
+  name?: string;
+  status?: string;
+  access_token?: string;
+  expires_in?: unknown;
+  details?: { issue?: string }[];
+  payer?: { email_address?: unknown };
+  amount?: PayPalAmount;
+  links?: unknown;
+  purchase_units?: { payments?: { captures?: PayPalCapture[]; refunds?: PayPalRefund[] } }[];
+}
+
+const issueOf = (data: PayPalResponse): string | undefined => {
+  const issue = data.details?.[0]?.issue ?? data.name;
   return typeof issue === 'string' ? issue : undefined;
 };
 
@@ -63,9 +100,9 @@ export function credentialsFor(center: CenterWithSecret, encryptionKey: string):
   };
 }
 
-async function safeJson(res: Response): Promise<any> {
+async function safeJson(res: Response): Promise<PayPalResponse> {
   try {
-    return await res.json();
+    return (await res.json()) as PayPalResponse;
   } catch {
     return {};
   }
@@ -153,11 +190,10 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
   const base = `${apiBase(credentials.env)}/v2/checkout/orders/${encodeURIComponent(orderId)}`;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  let data: any;
   const res = await fetch(`${base}/capture`, { method: 'POST', headers });
-  data = await safeJson(res);
+  let data = await safeJson(res);
   if (!res.ok) {
-    const alreadyCaptured = data?.details?.some((d: any) => d.issue === 'ORDER_ALREADY_CAPTURED');
+    const alreadyCaptured = data.details?.some((d) => d.issue === 'ORDER_ALREADY_CAPTURED');
     if (!alreadyCaptured) throw new PayPalError('capture failed', res.status, issueOf(data));
     const readBack = await fetch(base, { headers });
     data = await safeJson(readBack);
@@ -167,9 +203,9 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
   return captureState(data);
 }
 
-function captureState(data: any): CaptureState {
+function captureState(data: PayPalResponse): CaptureState {
   if (data.status !== 'COMPLETED') throw new PayPalError(`order not completed: ${data.status}`);
-  const captures: any[] = data.purchase_units?.[0]?.payments?.captures ?? [];
+  const captures: PayPalCapture[] = data.purchase_units?.[0]?.payments?.captures ?? [];
   const capture = captures.find((c) => c.status === 'COMPLETED');
   if (!capture) {
     const other = captures.find((c) => c.status === 'PENDING') ?? captures[0];
@@ -219,14 +255,14 @@ const ORDER_LINK = /\/v2\/checkout\/orders\/([A-Za-z0-9-]+)\/?$/;
 
 const linkTo = (links: unknown, rel: string): string | null => {
   if (!Array.isArray(links)) return null;
-  const link = links.find((l: any) => l?.rel === rel && typeof l.href === 'string');
-  return link ? link.href : null;
+  const link = (links as (PayPalLink | null)[]).find((l) => l?.rel === rel && typeof l.href === 'string');
+  return link?.href ?? null;
 };
 
-function completedRefundsOf(order: any, captureId: string): { cents: number; currency: string | null } {
+function completedRefundsOf(order: PayPalResponse, captureId: string): { cents: number; currency: string | null } {
   let cents = 0;
   let currency: string | null = null;
-  for (const unit of order?.purchase_units ?? []) {
+  for (const unit of order.purchase_units ?? []) {
     for (const refund of unit?.payments?.refunds ?? []) {
       if (refund?.status !== 'COMPLETED' || !refund.amount?.value) continue;
       const up = linkTo(refund.links, 'up');

@@ -19,13 +19,13 @@ export const POST: APIRoute = async ({ params, request, clientAddress }) => {
       return json({ error: 'Centro no encontrado' }, 404);
     }
 
-    let body: any;
+    let body: unknown;
     try {
       body = await request.json();
     } catch {
       return json({ error: 'Faltan datos requeridos (itemId, amount)' }, 400);
     }
-    const { itemId, amount, coverFees, paymentSource } = body ?? {};
+    const { itemId, amount, coverFees, paymentSource } = (body ?? {}) as Record<string, unknown>;
 
     if (!itemId || amount === undefined || amount === null) {
       return json({ error: 'Faltan datos requeridos (itemId, amount)' }, 400);

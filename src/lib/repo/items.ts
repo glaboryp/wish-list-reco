@@ -3,7 +3,7 @@ import { discardBlobs } from './blobs';
 import { END_OF_LIST } from '../admin/forms';
 import { STALE_PENDING_HOURS } from './pending-captures';
 import { sortForPublic, toWishlistItem } from '../items';
-import type { AdminItem, DBItemImage, ItemInput, ItemRow, WishlistItem } from '../../types/database';
+import type { AdminItem, DBItemImage, ItemInput, ItemRow, ItemStatus, WishlistItem } from '../../types/database';
 
 export async function listPublicItems(centerId: string): Promise<WishlistItem[]> {
   const rows = await sql<ItemRow>`
@@ -49,7 +49,21 @@ export async function getItemImages(itemId: string): Promise<DBItemImage[]> {
   return rows;
 }
 
-function toAdminItem(row: any): AdminItem {
+interface AdminItemRow {
+  id: string;
+  name: string;
+  description: string | null;
+  goal_amount: string;
+  raised_amount: string;
+  status: ItemStatus;
+  sort_order: number;
+  image_url: string | null;
+  alt_text: string | null;
+  donation_count: string | number;
+  blocking_donation_count: string | number;
+}
+
+function toAdminItem(row: AdminItemRow): AdminItem {
   return {
     id: row.id,
     name: row.name,
@@ -66,7 +80,7 @@ function toAdminItem(row: any): AdminItem {
 }
 
 export async function listAdminItems(centerId: string): Promise<AdminItem[]> {
-  const rows = await sql`
+  const rows = await sql<AdminItemRow>`
     SELECT
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
       COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
@@ -82,7 +96,7 @@ export async function listAdminItems(centerId: string): Promise<AdminItem[]> {
 }
 
 export async function getAdminItem(centerId: string, itemId: string): Promise<AdminItem | null> {
-  const rows = await sql`
+  const rows = await sql<AdminItemRow>`
     SELECT
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
       COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,

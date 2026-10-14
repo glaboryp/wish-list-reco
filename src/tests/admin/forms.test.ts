@@ -252,7 +252,7 @@ describe('parseNotifySettings', () => {
     expect(parseNotifySettings(form({ notify_mode: 'none' }))).toEqual({ ok: true, value: { mode: 'none' } });
   });
 
-  it('rejects anything else, including the not yet implemented daily mode', () => {
+  it('rejects anything else, including unknown modes', () => {
     expect(parseNotifySettings(form({ notify_mode: 'daily' })).ok).toBe(false);
     expect(parseNotifySettings(form({})).ok).toBe(false);
   });
