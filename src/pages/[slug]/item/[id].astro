@@ -8,8 +8,11 @@ import Icon from "../../../components/Icon.astro";
 import { formatDonorCount, formatEuro } from "../../../lib/format";
 import { fromCents, remainingCents } from "../../../lib/money";
 import { getItemImages, getPublicItem } from "../../../lib/repo/items";
-import { buildItemMeta } from "../../../lib/seo";
+import { buildItemMeta, normalizePath } from "../../../lib/seo";
 import ShareButton from "../../../components/ShareButton.astro";
+
+const normalizedPath = normalizePath(Astro.url.pathname);
+if (normalizedPath !== Astro.url.pathname) return Astro.redirect(`${normalizedPath}${Astro.url.search}`, 301);
 
 const { slug, id } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;

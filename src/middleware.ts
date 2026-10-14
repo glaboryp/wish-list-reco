@@ -4,7 +4,7 @@ import { legacyRedirectTarget } from './lib/legacy-redirect';
 
 const CSP = [
     "default-src 'self'",
-    "img-src 'self' https: data:",
+    "img-src 'self' https: data: blob:",
     "script-src 'self' 'unsafe-inline' https://www.paypal.com https://apis.google.com",
     "style-src 'self' 'unsafe-inline'",
     "connect-src 'self' https://www.paypal.com https://www.sandbox.paypal.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.vercel-storage.com https://vercel.com",

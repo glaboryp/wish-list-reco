@@ -6,7 +6,10 @@ import { centerNotFoundPage } from "../../lib/error-pages";
 import { getCenterBySlug } from "../../lib/repo/centers";
 import { countCenterDonors } from "../../lib/repo/donations";
 import { listPublicItems } from "../../lib/repo/items";
-import { buildCenterMeta } from "../../lib/seo";
+import { buildCenterMeta, normalizePath } from "../../lib/seo";
+
+const normalizedPath = normalizePath(Astro.url.pathname);
+if (normalizedPath !== Astro.url.pathname) return Astro.redirect(`${normalizedPath}${Astro.url.search}`, 301);
 
 const { slug } = Astro.params;
 const center = slug ? await getCenterBySlug(slug) : null;

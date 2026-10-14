@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absoluteUrl, buildItemMeta, buildCenterMeta, buildRobots, buildSitemap, truncate } from '../../lib/seo';
+import { absoluteUrl, buildItemMeta, buildCenterMeta, buildRobots, buildSitemap, normalizePath, truncate } from '../../lib/seo';
 
 const origin = 'https://example.org';
 
@@ -66,5 +66,33 @@ describe('robots and sitemap', () => {
     expect(xml).toContain('<loc>https://example.org/</loc>');
     expect(xml).toContain('<loc>https://example.org/rec&amp;x</loc>'.replace('rec&amp;x', 'rec%26x'));
     expect(xml).toContain('/item/b</loc>');
+  });
+});
+
+describe('normalizePath and canonical urls', () => {
+  const id = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+
+  it('strips trailing slashes, queries and hashes', () => {
+    expect(normalizePath('/casulla/')).toBe('/casulla');
+    expect(normalizePath('/casulla?utm=1#x')).toBe('/casulla');
+    expect(normalizePath('/')).toBe('/');
+  });
+
+  it('lowercases the item uuid only', () => {
+    expect(normalizePath(`/Casulla/item/${id}/`)).toBe(`/Casulla/item/${id.toLowerCase()}`);
+    expect(normalizePath('/casulla/item/not-a-uuid')).toBe('/casulla/item/not-a-uuid');
+  });
+
+  it('is used for the canonical of centers and items', () => {
+    const center = buildCenterMeta({ name: 'C', heroText: 't', heroImage: null, logo: null, path: '/casulla/', origin });
+    expect(center.canonical).toBe('https://example.org/casulla');
+    const item = buildItemMeta({
+      item: { name: 'N', description: 'd', goal: 10, raised: 1 },
+      centerName: 'C',
+      path: `/casulla/item/${id}?x=1`,
+      image: null,
+      origin,
+    });
+    expect(item.canonical).toBe(`https://example.org/casulla/item/${id.toLowerCase()}`);
   });
 });

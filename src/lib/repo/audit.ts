@@ -39,3 +39,14 @@ export async function listAudit(
   ]);
   return { rows, total: Number(count[0]?.total ?? 0) };
 }
+
+export const ACCOUNT_AUDIT_LIMIT = 20;
+
+export async function listAccountAudit(): Promise<AuditEntry[]> {
+  return sql<AuditEntry>`
+    SELECT id, center_id, actor_email, action, entity_type, entity_id, summary, created_at
+    FROM audit_log WHERE center_id IS NULL
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${ACCOUNT_AUDIT_LIMIT}
+  `;
+}
