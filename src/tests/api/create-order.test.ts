@@ -13,7 +13,9 @@ vi.mock('../../lib/repo/centers', () => ({ getCenterWithSecret }));
 vi.mock('../../lib/repo/items', () => ({ getPublicItem }));
 vi.mock('../../lib/rate-limit', () => ({ rateLimitRequest }));
 vi.mock('../../lib/repo/pending-captures', () => ({ recordPendingCapture }));
-vi.mock('../../lib/paypal', () => ({ credentialsFor, createOrder }));
+vi.mock('../../lib/paypal', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/paypal')>()), credentialsFor, createOrder }));
+
+import { PayPalError } from '../../lib/paypal';
 
 import { POST } from '../../pages/api/[slug]/paypal/create-order';
 
@@ -152,6 +154,13 @@ describe('POST /api/[slug]/paypal/create-order', () => {
   it('returns 500 when PayPal fails', async () => {
     createOrder.mockRejectedValue(new Error('boom'));
     expect((await call({ itemId: ITEM_ID, amount: 10 })).status).toBe(500);
+  });
+
+  it('returns a donor-friendly 422 when PayPal declines the payment method', async () => {
+    createOrder.mockRejectedValue(new PayPalError('order creation failed', 422, 'PAYER_CANNOT_PAY'));
+    const response = await call({ itemId: ITEM_ID, amount: 10 });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: 'PAYER_CANNOT_PAY', error: expect.stringContaining('otra forma de pago') });
   });
 
   it('records the order as pending so it can be reconciled later', async () => {

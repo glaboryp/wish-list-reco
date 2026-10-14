@@ -36,6 +36,7 @@ const successMessages: Record<string, string> = {
   'user-added': 'Encargada añadida. Ya puede entrar con su cuenta de Google.',
   'user-removed': 'Acceso quitado.',
   'center-created': 'Centro creado.',
+  'capture-resolved': 'Orden marcada como resuelta. El proceso diario ya no la registrará.',
 };
 const ok = Astro.url.searchParams.get('ok');
 const okMessage = ok ? (successMessages[ok] ?? 'Cambios guardados.') : null;

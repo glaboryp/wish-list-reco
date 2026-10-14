@@ -128,3 +128,63 @@ test('Clicking the card button on a small screen pins the card form height', asy
 
     await expect(page.locator('[id$="-card"]')).toHaveAttribute('data-expanded', '');
 });
+
+test('A decimal amount is shown and charged as the same whole-euro donation', async ({ page }) => {
+    await mockSdk(page);
+    let body: any = null;
+    await page.route('**/api/recoletos/paypal/create-order', async (route) => {
+        body = route.request().postDataJSON();
+        await route.fulfill({ json: { id: 'ORDER-1' } });
+    });
+    await page.goto(ITEM_URL);
+
+    await page.locator('input[name="amount"]').fill('10.50');
+    await page.getByLabel(/Añadir las comisiones/).check();
+    await expect(page.getByText(/Donación: 10,00 €\. Total a pagar: 10,66 € con PayPal/)).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window as any).__buttons?.length)).toBe(2);
+
+    const paypal = await buttonConfig(page, 'paypal');
+    await paypal.evaluate((config: any) => config.createOrder({}, {}));
+    expect(body).toMatchObject({ amount: 10, coverFees: true });
+});
+
+test('A payment PayPal is still processing does not invite the donor to pay again', async ({ page }) => {
+    await mockSdk(page);
+    let calls = 0;
+    await page.route('**/api/recoletos/paypal/capture-order', (route) => {
+        calls++;
+        return route.fulfill({ status: 202, json: { pending: true, message: 'PayPal está terminando de procesar tu pago. No hace falta que vuelvas a pagar.' } });
+    });
+    await page.goto(ITEM_URL);
+    await expect.poll(() => page.evaluate(() => (window as any).__buttons?.length)).toBe(2);
+
+    const paypal = await buttonConfig(page, 'paypal');
+    await paypal.evaluate((config: any) => config.onApprove({ orderID: 'ORDER-1' }, {}));
+
+    await expect(page.getByRole('heading', { name: 'Tu pago se está procesando' })).toBeVisible();
+    await expect(page.getByText('No hace falta que vuelvas a pagar')).toBeVisible();
+    await expect(page.getByText('¿Cuánto quieres donar?')).toBeHidden();
+    expect(calls).toBe(1);
+});
+
+test('A declined card lets the donor pick another payment method without retrying the capture', async ({ page }) => {
+    await mockSdk(page);
+    let calls = 0;
+    await page.route('**/api/recoletos/paypal/capture-order', (route) => {
+        calls++;
+        return route.fulfill({ status: 422, json: { error: 'PayPal no ha aceptado este medio de pago y no se ha cobrado nada.', code: 'INSTRUMENT_DECLINED' } });
+    });
+    await page.goto(ITEM_URL);
+    await expect.poll(() => page.evaluate(() => (window as any).__buttons?.length)).toBe(2);
+
+    const card = await buttonConfig(page, 'card');
+    const restarted = await card.evaluate(async (config: any) => {
+        let restarted = false;
+        await config.onApprove({ orderID: 'ORDER-1' }, { restart: async () => { restarted = true; } });
+        return restarted;
+    });
+
+    expect(restarted).toBe(true);
+    expect(calls).toBe(1);
+    await expect(page.getByRole('alert').filter({ hasText: 'no se ha cobrado nada' })).toBeVisible();
+});

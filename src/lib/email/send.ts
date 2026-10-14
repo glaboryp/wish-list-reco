@@ -6,6 +6,15 @@ export const SEND_TIMEOUT_MS = 4000;
 
 let warnedUnconfigured = false;
 
+export function describeSendError(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown error';
+  const { code, responseCode } = error as Error & { code?: unknown; responseCode?: unknown };
+  const parts = [error.name];
+  if (typeof code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(code)) parts.push(`code=${code}`);
+  if (typeof responseCode === 'number') parts.push(`responseCode=${responseCode}`);
+  return parts.join(' ');
+}
+
 export interface EmailTransport {
   send(to: string[], content: EmailContent): Promise<void>;
 }
@@ -19,7 +28,7 @@ function resendTransport(apiKey: string, from: string): EmailTransport {
         body: JSON.stringify({ from, to, subject: content.subject, html: content.html, text: content.text }),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });
-      if (!res.ok) throw new Error(`Resend responded ${res.status}`);
+      if (!res.ok) throw Object.assign(new Error('ResendError'), { name: 'ResendError', responseCode: res.status });
     },
   };
 }
@@ -74,6 +83,6 @@ export async function sendDonationEmails(input: DonationEmailInput): Promise<voi
 
   const results = await Promise.allSettled(jobs);
   for (const result of results) {
-    if (result.status === 'rejected') console.error('Error enviando aviso por correo', result.reason);
+    if (result.status === 'rejected') console.error(`Error enviando aviso por correo: ${describeSendError(result.reason)}`);
   }
 }

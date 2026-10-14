@@ -135,6 +135,7 @@ for (const [centerIndex, center] of centers.entries()) {
 
 const centerIds = centers.map((center) => center.id);
 statements.push({ text: 'DELETE FROM donations WHERE center_id = ANY($1::uuid[])', params: [centerIds] });
+statements.push({ text: 'DELETE FROM pending_captures WHERE center_id = ANY($1::uuid[])', params: [centerIds] });
 statements.push({ text: 'DELETE FROM items WHERE center_id = ANY($1::uuid[])', params: [centerIds] });
 statements.push({ text: 'DELETE FROM center_users WHERE center_id = ANY($1::uuid[])', params: [centerIds] });
 

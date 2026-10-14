@@ -46,14 +46,17 @@ export async function addManualDonation(input: {
   amount: number;
   note: string;
 }): Promise<ManualDonationResult> {
-  const rows = await sql`
-    INSERT INTO donations (center_id, item_id, amount, currency, source, note)
-    SELECT ${input.centerId}, i.id, ${input.amount}, 'EUR', 'manual', ${input.note}
-    FROM items i
-    WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
-      AND ${input.amount}::numeric <= i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0)
-    RETURNING id
-  `;
+  const [, rows] = await sql.transaction((txn) => [
+    txn`SELECT id FROM items WHERE id = ${input.itemId} AND center_id = ${input.centerId} FOR UPDATE`,
+    txn`
+      INSERT INTO donations (center_id, item_id, amount, currency, source, note)
+      SELECT ${input.centerId}, i.id, ${input.amount}, 'EUR', 'manual', ${input.note}
+      FROM items i
+      WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
+        AND ${input.amount}::numeric <= i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0)
+      RETURNING id
+    `,
+  ]);
   if (rows.length > 0) return { status: 'created' };
 
   const item = await sql<{ remaining: string }>`

@@ -10,6 +10,7 @@ import {
   parseNewCenter,
   parseNotifySettings,
   parsePaypal,
+  parseResolveCapture,
   parseVoidDonation,
 } from '../../lib/admin/forms';
 
@@ -254,5 +255,23 @@ describe('parseNotifySettings', () => {
   it('rejects anything else, including the not yet implemented daily mode', () => {
     expect(parseNotifySettings(form({ notify_mode: 'daily' })).ok).toBe(false);
     expect(parseNotifySettings(form({})).ok).toBe(false);
+  });
+});
+
+describe('parseResolveCapture', () => {
+  it('accepts a PayPal order id with a note', () => {
+    expect(parseResolveCapture(form({ order_id: '5O190127TN364715T', note: '  apuntada a mano ' }))).toEqual({
+      ok: true,
+      value: { orderId: '5O190127TN364715T', note: 'apuntada a mano' },
+    });
+  });
+
+  it.each([
+    { order_id: '', note: 'apuntada a mano' },
+    { order_id: "x' OR 1=1", note: 'apuntada a mano' },
+    { order_id: '5O190127TN364715T', note: 'ok' },
+    { order_id: '5O190127TN364715T', note: 'x'.repeat(201) },
+  ])('rejects %j', (fields) => {
+    expect(parseResolveCapture(form(fields)).ok).toBe(false);
   });
 });
