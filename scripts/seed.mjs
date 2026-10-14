@@ -78,7 +78,7 @@ function donationsFor(centerId, itemId, raised, centerIndex, itemIndex) {
       fee: paypal ? round2(amount * 0.029 + 0.35) : 0,
       capture: paypal ? `SEED-CAPTURE-${++captureCounter}` : null,
       note: paypal ? null : 'Efectivo entregado en la sede',
-      voidedAt: null, voidedBy: null, voidReason: null,
+      voidedAt: null, voidedBy: null, voidReason: null, refunded: 0, refundedAt: null,
       createdAt: at(k + itemIndex * 5),
     });
     if (k % 6 === 5) {
@@ -91,10 +91,21 @@ function donationsFor(centerId, itemId, raised, centerIndex, itemIndex) {
         voidedAt: at(k + itemIndex * 5 + 1),
         voidedBy: voidedPaypal ? 'ana.recoletos@example.org' : null,
         voidReason: voidedPaypal ? 'Reembolso solicitado por la donante' : null,
+        refunded: 0, refundedAt: null,
         createdAt: at(k + itemIndex * 5),
       });
     }
     k++;
+  }
+  const partial = itemIndex === 0 ? rows.find((row) => row.source === 'paypal' && !row.voidedAt && row.amount >= 2) : null;
+  if (partial) {
+    partial.refunded = round2(partial.amount / 2);
+    partial.refundedAt = at(itemIndex + 2);
+    rows.push({
+      centerId, itemId, amount: partial.refunded, source: 'manual', fee: 0, capture: null,
+      note: 'Compensa un reembolso parcial', voidedAt: null, voidedBy: null, voidReason: null,
+      refunded: 0, refundedAt: null, createdAt: at(itemIndex + 1),
+    });
   }
   return rows;
 }
@@ -161,8 +172,8 @@ statements.push(
 statements.push(
   multiInsert(
     'donations',
-    ['center_id', 'item_id', 'amount', 'fee_amount', 'currency', 'source', 'paypal_capture_id', 'note', 'voided_at', 'voided_by', 'void_reason', 'created_at'],
-    donations.map((d) => [d.centerId, d.itemId, d.amount, d.fee, 'EUR', d.source, d.capture, d.note, d.voidedAt, d.voidedBy, d.voidReason, d.createdAt]),
+    ['center_id', 'item_id', 'amount', 'fee_amount', 'currency', 'source', 'paypal_capture_id', 'note', 'voided_at', 'voided_by', 'void_reason', 'refunded_amount', 'refunded_at', 'created_at'],
+    donations.map((d) => [d.centerId, d.itemId, d.amount, d.fee, 'EUR', d.source, d.capture, d.note, d.voidedAt, d.voidedBy, d.voidReason, d.refunded, d.refundedAt, d.createdAt]),
   ),
 );
 

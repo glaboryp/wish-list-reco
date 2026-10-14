@@ -55,6 +55,10 @@ const pendingCaptures = [
   { paypal_order_id: 'MOCKORDERREVIEW1', center_id: RECOLETOS_ID, item_id: ITEM_ID, amount: '20.00', status: 'needs_review', attempts: 1, last_error: 'capture MOCKCAPTURE01 REFUNDED in PayPal, not credited', paypal_capture_id: 'MOCKCAPTURE01', created_at: '2026-10-02T09:00:00Z', item_name: 'Cáliz' },
 ];
 
+const partialRefunds = [
+  { id: '55555555-5555-4555-8555-555555555551', center_id: RECOLETOS_ID, center_name: 'Recoletos', center_slug: 'recoletos', item_name: 'Cáliz', amount: '12.50', fee_amount: '0.66', refunded_amount: '2.50', refunded_at: '2026-10-05T10:00:00Z', paypal_capture_id: 'MOCKCAPTUREPART1' },
+];
+
 const nearlyDoneItem = {
   ...item,
   id: '33333333-3333-4333-8333-333333333334',
@@ -98,6 +102,9 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   if (text.includes('rate_limits')) {
     return [{ count: 1, retry_after: 1 }];
   }
+  if (text.includes('refunded_amount > 0')) {
+    return text.includes('COUNT(*)') ? [{ total: String(partialRefunds.length) }] : partialRefunds;
+  }
   if (text.includes('JOIN centers')) {
     return values.some(isManager) ? [{ slug: 'recoletos', name: 'Recoletos' }] : [];
   }
@@ -128,8 +135,8 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
   if (text.includes('FROM donations d JOIN items i')) {
     return has(RECOLETOS_ID)
       ? [
-          { id: '55555555-5555-4555-8555-555555555551', item_id: ITEM_ID, item_name: 'Cáliz', amount: '10.00', fee_amount: '0.66', currency: 'EUR', source: 'paypal', note: null, voided_at: null, created_at: '2026-10-02T10:00:00Z' },
-          { id: '55555555-5555-4555-8555-555555555552', item_id: ITEM_ID, item_name: 'Cáliz', amount: '15.00', fee_amount: '0', currency: 'EUR', source: 'manual', note: 'bizum', voided_at: null, created_at: '2026-10-01T10:00:00Z' },
+          { id: '55555555-5555-4555-8555-555555555551', item_id: ITEM_ID, item_name: 'Cáliz', amount: '12.50', fee_amount: '0.66', refunded_amount: '2.50', refunded_at: '2026-10-05T10:00:00Z', currency: 'EUR', source: 'paypal', note: null, voided_at: null, created_at: '2026-10-02T10:00:00Z' },
+          { id: '55555555-5555-4555-8555-555555555552', item_id: ITEM_ID, item_name: 'Cáliz', amount: '15.00', fee_amount: '0', refunded_amount: '0', refunded_at: null, currency: 'EUR', source: 'manual', note: 'bizum', voided_at: null, created_at: '2026-10-01T10:00:00Z' },
         ]
       : [];
   }

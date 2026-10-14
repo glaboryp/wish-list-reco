@@ -1,4 +1,5 @@
 import { decryptSecret } from './crypto';
+import { centsToDecimalString, toCents } from './money';
 import type { CenterWithSecret, PayPalEnv } from '../types/database';
 
 export interface PayPalCredentials {
@@ -208,17 +209,54 @@ export async function lookupOrder(credentials: PayPalCredentials, orderId: strin
   return captureState(data);
 }
 
-export type CaptureRefundState = 'refunded' | 'partially_refunded' | 'not_refunded' | 'not_found';
+export type CaptureRefundState =
+  | { state: 'refunded' }
+  | { state: 'partially_refunded'; refundedAmount: string; currency: string }
+  | { state: 'not_refunded' }
+  | { state: 'not_found' };
+
+const ORDER_LINK = /\/v2\/checkout\/orders\/([A-Za-z0-9-]+)\/?$/;
+
+const linkTo = (links: unknown, rel: string): string | null => {
+  if (!Array.isArray(links)) return null;
+  const link = links.find((l: any) => l?.rel === rel && typeof l.href === 'string');
+  return link ? link.href : null;
+};
+
+function completedRefundsOf(order: any, captureId: string): { cents: number; currency: string | null } {
+  let cents = 0;
+  let currency: string | null = null;
+  for (const unit of order?.purchase_units ?? []) {
+    for (const refund of unit?.payments?.refunds ?? []) {
+      if (refund?.status !== 'COMPLETED' || !refund.amount?.value) continue;
+      const up = linkTo(refund.links, 'up');
+      if (up && !up.endsWith(`/captures/${captureId}`)) continue;
+      cents += toCents(refund.amount.value);
+      currency ??= refund.amount.currency_code ?? null;
+    }
+  }
+  return { cents, currency };
+}
 
 export async function lookupCaptureRefund(credentials: PayPalCredentials, captureId: string): Promise<CaptureRefundState> {
   const token = await accessToken(credentials);
-  const res = await fetch(`${apiBase(credentials.env)}/v2/payments/captures/${encodeURIComponent(captureId)}`, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  });
-  if (res.status === 404) return 'not_found';
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const res = await fetch(`${apiBase(credentials.env)}/v2/payments/captures/${encodeURIComponent(captureId)}`, { headers });
+  if (res.status === 404) return { state: 'not_found' };
   const data = await safeJson(res);
   if (!res.ok) throw new PayPalError('capture lookup failed', res.status);
-  if (data.status === 'REFUNDED') return 'refunded';
-  if (data.status === 'PARTIALLY_REFUNDED') return 'partially_refunded';
-  return 'not_refunded';
+  if (data.status === 'REFUNDED') return { state: 'refunded' };
+  if (data.status !== 'PARTIALLY_REFUNDED') return { state: 'not_refunded' };
+
+  const orderId = linkTo(data.links, 'up')?.match(ORDER_LINK)?.[1];
+  if (!orderId) throw new PayPalError('capture without order link');
+  const orderRes = await fetch(`${apiBase(credentials.env)}/v2/checkout/orders/${encodeURIComponent(orderId)}`, { headers });
+  const order = await safeJson(orderRes);
+  if (!orderRes.ok) throw new PayPalError('order lookup failed', orderRes.status);
+  const refunded = completedRefundsOf(order, captureId);
+  return {
+    state: 'partially_refunded',
+    refundedAmount: centsToDecimalString(refunded.cents),
+    currency: refunded.currency ?? data.amount?.currency_code ?? 'EUR',
+  };
 }

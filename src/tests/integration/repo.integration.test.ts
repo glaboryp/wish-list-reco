@@ -5,9 +5,10 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
 const { mockDel } = vi.hoisted(() => ({ mockDel: vi.fn() }));
 vi.mock('@vercel/blob', () => ({ del: mockDel }));
 
-const { mockLookupOrder } = vi.hoisted(() => ({ mockLookupOrder: vi.fn() }));
+const { mockLookupOrder, mockLookupCaptureRefund } = vi.hoisted(() => ({ mockLookupOrder: vi.fn(), mockLookupCaptureRefund: vi.fn() }));
 vi.mock('../../lib/paypal', () => ({
   lookupOrder: mockLookupOrder,
+  lookupCaptureRefund: mockLookupCaptureRefund,
   credentialsFor: () => ({ clientId: 'cid', clientSecret: 'secret', env: 'sandbox' }),
 }));
 
@@ -22,8 +23,21 @@ vi.mock('../../lib/db', async () => {
 });
 
 import sql from '../../lib/db';
-import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings } from '../../lib/repo/centers';
-import { addManualDonation, countCenterDonors, getDashboard, listAllDonations, listDonations, recordPaypalDonation, voidManualDonation, voidPaypalDonation } from '../../lib/repo/donations';
+import { createCenter, getCenterBySlug, updateAppearance, updateFeeSettings, updatePaypal } from '../../lib/repo/centers';
+import {
+  addManualDonation,
+  applyPartialRefund,
+  countCenterDonors,
+  getDashboard,
+  getDonationSummary,
+  listAllDonations,
+  listDonations,
+  listPartialRefunds,
+  recordPaypalDonation,
+  voidManualDonation,
+  voidPaypalDonation,
+} from '../../lib/repo/donations';
+import { syncPaypalRefunds } from '../../lib/paypal-refund-sync';
 import {
   addItemImage,
   createItem,
@@ -900,5 +914,115 @@ describe.skipIf(!databaseUrl)('integrity of deletes and concurrent writes', () =
     const results = await Promise.all([removeCenterUser(center, a), removeCenterUser(center, b)]);
     expect([...results].sort()).toEqual(['last', 'removed']);
     expect(await sql`SELECT 1 FROM center_users WHERE center_id = ${center}`).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!databaseUrl)('partial PayPal refunds', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  let center: string;
+  let other: string;
+
+  beforeAll(async () => {
+    center = (await createCenter({ slug: `it-pr-${suffix}`, name: 'Partial' }))!.id;
+    other = (await createCenter({ slug: `it-po-${suffix}`, name: 'Other' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM audit_log WHERE center_id IN (${center}, ${other})`;
+    await sql`DELETE FROM donations WHERE center_id IN (${center}, ${other})`;
+    await sql`DELETE FROM items WHERE center_id IN (${center}, ${other})`;
+    await sql`DELETE FROM centers WHERE id IN (${center}, ${other})`;
+  });
+
+  const donationOf = async (itemId: string) => (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${itemId}`)[0].id;
+  const publicItem = async (itemId: string) => (await listPublicItems(center)).find((item) => item.id === itemId)!;
+
+  it('discounts the refunded part everywhere, un-funds the item and keeps the donor', async () => {
+    const id = await createItem(center, { ...itemInput, name: 'partial', goal: 20, sortOrder: 1 });
+    await recordPaypalDonation({ centerId: center, itemId: id, amount: '20.00', feeAmount: '0.66', currency: 'EUR', captureId: `CAP-${suffix}-p1` });
+    expect(await publicItem(id)).toMatchObject({ raised: 20, status: 'funded', donorCount: 1 });
+    const donation = await donationOf(id);
+
+    expect(await applyPartialRefund(other, donation, '5.00')).toEqual({ outcome: 'missing' });
+    expect(await applyPartialRefund(center, donation, '5.00')).toEqual({ outcome: 'updated', previous: '0.00' });
+
+    expect(await publicItem(id)).toMatchObject({ raised: 15, status: 'active', donorCount: 1 });
+    expect(await getAdminItem(center, id)).toMatchObject({ raised: 15 });
+    expect(await getDonationSummary(center, id)).toMatchObject({ raised: 15 });
+    const page = await listDonations(center, { itemId: id });
+    expect(page.activeSum).toBe(15);
+    expect(page.rows[0]).toMatchObject({ amount: '20.00', refunded_amount: '5.00' });
+    expect(page.rows[0].refunded_at).not.toBeNull();
+    expect((await getDashboard(center)).netRaised).toBe(15);
+    expect(await countCenterDonors(center)).toBe(1);
+    expect(await addManualDonation({ centerId: center, itemId: id, amount: 6, note: 'bizum' })).toEqual({ status: 'too_much', remaining: 5 });
+  });
+
+  it('is idempotent, follows a growing refund, clamps to the donation and refuses inconsistent values', async () => {
+    const id = await createItem(center, { ...itemInput, name: 'grow', goal: 50, sortOrder: 2 });
+    await recordPaypalDonation({ centerId: center, itemId: id, amount: '10.00', currency: 'EUR', captureId: `CAP-${suffix}-p2` });
+    const donation = await donationOf(id);
+
+    expect(await applyPartialRefund(center, donation, '2.00')).toEqual({ outcome: 'updated', previous: '0.00' });
+    expect(await applyPartialRefund(center, donation, '2.00')).toEqual({ outcome: 'unchanged' });
+    expect(await applyPartialRefund(center, donation, '7.50')).toEqual({ outcome: 'updated', previous: '2.00' });
+    expect(await getAdminItem(center, id)).toMatchObject({ raised: 2.5 });
+    expect(await applyPartialRefund(center, donation, '99.00')).toEqual({ outcome: 'updated', previous: '7.50' });
+    expect(await getAdminItem(center, id)).toMatchObject({ raised: 0 });
+
+    await expect(sql`UPDATE donations SET refunded_amount = 10.01 WHERE id = ${donation}`).rejects.toThrow();
+    await expect(sql`UPDATE donations SET refunded_amount = -1 WHERE id = ${donation}`).rejects.toThrow();
+
+    await addManualDonation({ centerId: center, itemId: id, amount: 5, note: 'efectivo' });
+    const manual = (await sql<{ id: string }>`SELECT id FROM donations WHERE item_id = ${id} AND source = 'manual'`)[0].id;
+    expect(await applyPartialRefund(center, manual, '1.00')).toEqual({ outcome: 'missing' });
+  });
+
+  it('lists live partial refunds for the superadmin and drops them once voided', async () => {
+    const id = await createItem(center, { ...itemInput, name: 'listed', goal: 50, sortOrder: 3 });
+    await recordPaypalDonation({ centerId: center, itemId: id, amount: '30.00', currency: 'EUR', captureId: `CAP-${suffix}-p3` });
+    const donation = await donationOf(id);
+    await applyPartialRefund(center, donation, '4.00');
+
+    const listed = await listPartialRefunds();
+    expect(listed.rows[0]).toMatchObject({ id: donation, center_slug: `it-pr-${suffix}`, item_name: 'listed', refunded_amount: '4.00', paypal_capture_id: `CAP-${suffix}-p3` });
+    expect(listed.total).toBeGreaterThanOrEqual(1);
+
+    await voidPaypalDonation(center, donation, { reason: 'Reembolso en PayPal', actorEmail: null });
+    expect((await listPartialRefunds(200)).rows.some((row) => row.id === donation)).toBe(false);
+    expect(await applyPartialRefund(center, donation, '5.00')).toEqual({ outcome: 'missing' });
+  });
+
+  it('runs end to end in the daily sync: discounts once, audits once, and voids when the refund becomes total', async () => {
+    await updatePaypal(center, { clientId: 'cid', env: 'sandbox', secretEncrypted: 'v1:a:b:c' });
+    const id = await createItem(center, { ...itemInput, name: 'synced', goal: 10, sortOrder: 4 });
+    const capture = `CAP-${suffix}-sync`;
+    await recordPaypalDonation({ centerId: center, itemId: id, amount: '10.00', feeAmount: '0.66', currency: 'EUR', captureId: capture });
+    const donation = await donationOf(id);
+    mockLookupCaptureRefund.mockImplementation(async (_credentials: unknown, captureId: string) =>
+      captureId === capture ? { state: 'partially_refunded', refundedAmount: '5.33', currency: 'EUR' } : { state: 'not_refunded' },
+    );
+
+    const first = await syncPaypalRefunds({ encryptionKey: 'k' });
+    expect(first.partiallyRefunded).toContainEqual({
+      centerSlug: `it-pr-${suffix}`, donationId: donation, captureId: capture, refundedGross: '5.33', refundedNet: '5.00', updated: true,
+    });
+    expect(await publicItem(id)).toMatchObject({ raised: 5, status: 'active' });
+
+    const second = await syncPaypalRefunds({ encryptionKey: 'k' });
+    expect(second.partiallyRefunded.find((entry) => entry.donationId === donation)).toMatchObject({ updated: false });
+    const audits = (await listAudit(center, 1)).rows.filter((entry) => entry.action === 'donation.partial_refund');
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ actor_email: 'PayPal (automático)', entity_id: donation });
+
+    mockLookupCaptureRefund.mockImplementation(async (_credentials: unknown, captureId: string) =>
+      captureId === capture ? { state: 'refunded' } : { state: 'not_refunded' },
+    );
+    expect((await syncPaypalRefunds({ encryptionKey: 'k' })).voided).toBeGreaterThanOrEqual(1);
+    const row = (await listDonations(center, { itemId: id })).rows[0];
+    expect(row).toMatchObject({ void_reason: 'Reembolso en PayPal', voided_by: null });
+    expect(await publicItem(id)).toMatchObject({ raised: 0, donorCount: 0 });
+
+    await sql`UPDATE centers SET paypal_client_id = NULL, paypal_secret_encrypted = NULL WHERE id = ${center}`;
   });
 });

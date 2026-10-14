@@ -3,6 +3,7 @@ import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { cardClass, chipClass, linkClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { countItemsByStatus, itemsNearCompletion } from "../../../lib/dashboard";
 import { formatDateTime, formatEuro } from "../../../lib/format";
+import { countedAmount } from "../../../lib/money";
 import { guardCenter } from "../../../lib/auth/guard";
 import { getDashboard } from "../../../lib/repo/donations";
 
@@ -93,6 +94,9 @@ const statusCards = [
               <td class={`${tdClass} font-semibold`} data-label="Artículo">{donation.item_name}</td>
               <td class={`${tdClass} tabular`} data-label="Importe">
                 <span class={donation.voided_at ? 'line-through' : ''}>{formatEuro(Number(donation.amount))}</span>
+                {Number(donation.refunded_amount) > 0 && !donation.voided_at && (
+                  <span class="block text-sm text-muted">Reembolsado {formatEuro(Number(donation.refunded_amount))} · cuenta {formatEuro(countedAmount(donation.amount, donation.refunded_amount))}</span>
+                )}
               </td>
               <td class={tdClass} data-label="Cómo llegó">
                 {donation.voided_at

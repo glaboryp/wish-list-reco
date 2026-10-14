@@ -125,6 +125,8 @@ export interface DonationRow {
   item_name: string;
   amount: string;
   fee_amount: string;
+  refunded_amount: string;
+  refunded_at: string | null;
   currency: string;
   source: 'paypal' | 'manual';
   note: string | null;

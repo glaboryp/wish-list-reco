@@ -28,7 +28,7 @@ export async function getDonationSummary(
 ): Promise<{ name: string; goal: number; raised: number } | null> {
   const rows = await sql<{ name: string; goal_amount: string; raised: string }>`
     SELECT i.name, i.goal_amount,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised
+      COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised
     FROM items i WHERE i.id = ${itemId} AND i.center_id = ${centerId}
   `;
   if (rows.length === 0) return null;
@@ -53,14 +53,14 @@ export async function addManualDonation(input: {
       SELECT ${input.centerId}, i.id, ${input.amount}, 'EUR', 'manual', ${input.note}
       FROM items i
       WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
-        AND ${input.amount}::numeric <= i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0)
+        AND ${input.amount}::numeric <= i.goal_amount - COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0)
       RETURNING id
     `,
   ]);
   if (rows.length > 0) return { status: 'created' };
 
   const item = await sql<{ remaining: string }>`
-    SELECT GREATEST(i.goal_amount - COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0), 0) AS remaining
+    SELECT GREATEST(i.goal_amount - COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0), 0) AS remaining
     FROM items i WHERE i.id = ${input.itemId} AND i.center_id = ${input.centerId}
   `;
   if (item.length === 0) return { status: 'missing' };
@@ -93,14 +93,67 @@ export async function voidPaypalDonation(
   return existing.length > 0 ? 'already_voided' : 'missing';
 }
 
+export type PartialRefundOutcome = { outcome: 'updated'; previous: string } | { outcome: 'unchanged' } | { outcome: 'missing' };
+
+export async function applyPartialRefund(centerId: string, donationId: string, refundedAmount: string): Promise<PartialRefundOutcome> {
+  const rows = await sql<{ previous: string }>`
+    UPDATE donations d SET refunded_amount = LEAST(${refundedAmount}::numeric, d.amount), refunded_at = NOW()
+    FROM donations old
+    WHERE old.id = d.id AND d.id = ${donationId} AND d.center_id = ${centerId}
+      AND d.source = 'paypal' AND d.voided_at IS NULL
+      AND d.refunded_amount <> LEAST(${refundedAmount}::numeric, d.amount)
+    RETURNING old.refunded_amount AS previous
+  `;
+  if (rows.length > 0) return { outcome: 'updated', previous: rows[0].previous };
+  const existing = await sql`
+    SELECT 1 AS ok FROM donations
+    WHERE id = ${donationId} AND center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
+  `;
+  return existing.length > 0 ? { outcome: 'unchanged' } : { outcome: 'missing' };
+}
+
+export const PARTIAL_REFUNDS_LIMIT = 20;
+
+export interface PartialRefundRow {
+  id: string;
+  center_id: string;
+  center_name: string;
+  center_slug: string;
+  item_name: string;
+  amount: string;
+  fee_amount: string;
+  refunded_amount: string;
+  refunded_at: string;
+  paypal_capture_id: string;
+}
+
+export async function listPartialRefunds(limit = PARTIAL_REFUNDS_LIMIT): Promise<{ rows: PartialRefundRow[]; total: number }> {
+  const [rows, count] = await Promise.all([
+    sql<PartialRefundRow>`
+      SELECT d.id, d.center_id, c.name AS center_name, c.slug AS center_slug, i.name AS item_name,
+        d.amount, d.fee_amount, d.refunded_amount, d.refunded_at, d.paypal_capture_id
+      FROM donations d JOIN items i ON i.id = d.item_id JOIN centers c ON c.id = d.center_id
+      WHERE d.refunded_amount > 0 AND d.voided_at IS NULL
+      ORDER BY d.refunded_at DESC NULLS LAST, d.id DESC
+      LIMIT ${limit}
+    `,
+    sql`SELECT COUNT(*) AS total FROM donations WHERE refunded_amount > 0 AND voided_at IS NULL`,
+  ]);
+  return { rows, total: Number(count[0]?.total ?? 0) };
+}
+
 export interface LivePaypalDonation {
   id: string;
   paypal_capture_id: string;
+  amount: string;
+  fee_amount: string;
+  refunded_amount: string;
+  currency: string;
 }
 
 export async function listLivePaypalDonations(centerId: string, sinceDays: number, limit: number): Promise<LivePaypalDonation[]> {
   return sql<LivePaypalDonation>`
-    SELECT id, paypal_capture_id FROM donations
+    SELECT id, paypal_capture_id, amount, fee_amount, refunded_amount, currency FROM donations
     WHERE center_id = ${centerId} AND source = 'paypal' AND voided_at IS NULL
       AND created_at > NOW() - make_interval(days => ${sinceDays}::int)
     ORDER BY created_at DESC, id DESC
@@ -126,14 +179,14 @@ export async function listDonations(
 
   const [rows, totals] = await Promise.all([
     sql<DonationRow>`
-      SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
+      SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.refunded_amount, d.refunded_at, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
       FROM donations d JOIN items i ON i.id = d.item_id
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
       ORDER BY d.created_at DESC, d.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `,
     sql<{ total: string; active_sum: string }>`
-      SELECT COUNT(*) AS total, COALESCE(SUM(d.amount) FILTER (WHERE d.voided_at IS NULL), 0) AS active_sum
+      SELECT COUNT(*) AS total, COALESCE(SUM(d.amount - d.refunded_amount) FILTER (WHERE d.voided_at IS NULL), 0) AS active_sum
       FROM donations d
       WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
     `,
@@ -147,7 +200,7 @@ export async function listDonations(
 
 export async function listAllDonations(centerId: string, itemId: string | null = null): Promise<DonationRow[]> {
   return sql<DonationRow>`
-    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
+    SELECT d.id, d.item_id, i.name AS item_name, d.amount, d.fee_amount, d.refunded_amount, d.refunded_at, d.currency, d.source, d.note, d.voided_at, d.voided_by, d.void_reason, d.created_at
     FROM donations d JOIN items i ON i.id = d.item_id
     WHERE d.center_id = ${centerId} AND (${itemId}::uuid IS NULL OR d.item_id = ${itemId}::uuid)
     ORDER BY d.created_at DESC, d.id DESC

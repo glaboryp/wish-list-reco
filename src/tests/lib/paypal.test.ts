@@ -292,16 +292,62 @@ describe('lookupOrder', () => {
 });
 
 describe('lookupCaptureRefund', () => {
-  const lookup = (response: unknown) => {
-    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' })).mockResolvedValueOnce(response);
+  const capture = (status: string) => ({
+    id: 'CAP1',
+    status,
+    amount: { currency_code: 'EUR', value: '10.66' },
+    links: [
+      { href: 'https://api.sandbox.paypal.com/v2/payments/captures/CAP1', rel: 'self', method: 'GET' },
+      { href: 'https://api.sandbox.paypal.com/v2/payments/captures/CAP1/refund', rel: 'refund', method: 'POST' },
+      { href: 'https://api.sandbox.paypal.com/v2/checkout/orders/ORDER1', rel: 'up', method: 'GET' },
+    ],
+  });
+  const refund = (id: string, value: string, status = 'COMPLETED', captureId = 'CAP1') => ({
+    id,
+    status,
+    amount: { currency_code: 'EUR', value },
+    links: [
+      { href: `https://api.sandbox.paypal.com/v2/payments/refunds/${id}`, rel: 'self', method: 'GET' },
+      { href: `https://api.sandbox.paypal.com/v2/payments/captures/${captureId}`, rel: 'up', method: 'GET' },
+    ],
+  });
+  const order = (refunds: unknown[]) => ({
+    id: 'ORDER1',
+    status: 'COMPLETED',
+    purchase_units: [{ payments: { captures: [{ id: 'CAP1', status: 'PARTIALLY_REFUNDED' }], refunds } }],
+  });
+  const lookup = (...responses: unknown[]) => {
+    fetchMock.mockResolvedValueOnce(ok({ access_token: 'tok' }));
+    for (const response of responses) fetchMock.mockResolvedValueOnce(response);
     return lookupCaptureRefund(creds, 'CAP1');
   };
 
   it('maps the capture status', async () => {
-    expect(await lookup(ok({ status: 'REFUNDED' }))).toBe('refunded');
-    expect(await lookup(ok({ status: 'PARTIALLY_REFUNDED' }))).toBe('partially_refunded');
-    expect(await lookup(ok({ status: 'COMPLETED' }))).toBe('not_refunded');
-    expect(await lookup(fail(404, {}))).toBe('not_found');
+    expect(await lookup(ok(capture('REFUNDED')))).toEqual({ state: 'refunded' });
+    expect(await lookup(ok(capture('COMPLETED')))).toEqual({ state: 'not_refunded' });
+    expect(await lookup(fail(404, {}))).toEqual({ state: 'not_found' });
+  });
+
+  it('adds up the completed refunds of a partially refunded capture from its order', async () => {
+    const result = await lookup(
+      ok(capture('PARTIALLY_REFUNDED')),
+      ok(order([refund('R1', '2.00'), refund('R2', '1.33'), refund('R3', '4.00', 'PENDING'), refund('R4', '5.00', 'COMPLETED', 'OTHER')])),
+    );
+    expect(result).toEqual({ state: 'partially_refunded', refundedAmount: '3.33', currency: 'EUR' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe('https://api-m.sandbox.paypal.com/v2/checkout/orders/ORDER1');
+  });
+
+  it('builds the order URL from the configured host, not from the link host', async () => {
+    const tampered = capture('PARTIALLY_REFUNDED');
+    tampered.links[2].href = 'https://evil.example/v2/checkout/orders/ORDER1';
+    await lookup(ok(tampered), ok(order([refund('R1', '2.00')])));
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe('https://api-m.sandbox.paypal.com/v2/checkout/orders/ORDER1');
+  });
+
+  it('throws when the order cannot be found or read', async () => {
+    const noLink = { ...capture('PARTIALLY_REFUNDED'), links: [] };
+    await expect(lookup(ok(noLink))).rejects.toBeInstanceOf(PayPalError);
+    await expect(lookup(ok(capture('PARTIALLY_REFUNDED')), fail(500, {}))).rejects.toBeInstanceOf(PayPalError);
   });
 
   it('queries the capture endpoint and throws on other failures', async () => {

@@ -1,12 +1,14 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
-import { formatDateTime } from "../../lib/format";
+import { formatDateTime, formatEuro } from "../../lib/format";
+import { countedAmount } from "../../lib/money";
 import Icon from "../../components/Icon.astro";
 import { buttonClass, cardClass, chipClass, formFooterClass, helpClass, inputClass, labelClass, secondaryButtonClass, tableClass, tdClass, thClass } from "../../components/admin/ui";
 import { parseNewCenter, parseResolveCapture } from "../../lib/admin/forms";
 import { guardSuperadmin } from "../../lib/auth/guard";
 import { recordAudit, listAccountAudit } from "../../lib/repo/audit";
 import { createCenter, listCenters } from "../../lib/repo/centers";
+import { listPartialRefunds, PARTIAL_REFUNDS_LIMIT } from "../../lib/repo/donations";
 import { listUnresolvedCaptures, resolveCaptureManually } from "../../lib/repo/pending-captures";
 
 const guard = await guardSuperadmin(Astro);
@@ -49,7 +51,7 @@ if (Astro.request.method === 'POST') {
   return Astro.redirect(`/admin/centers/${created.slug}?ok=center-created`, 303);
 }
 
-const [centers, unresolved, accountAudit] = await Promise.all([listCenters(), listUnresolvedCaptures(), listAccountAudit()]);
+const [centers, unresolved, accountAudit, partialRefunds] = await Promise.all([listCenters(), listUnresolvedCaptures(), listAccountAudit(), listPartialRefunds()]);
 const centerNames = new Map(centers.map((center) => [center.id, center.name]));
 const host = Astro.url.host;
 ---
@@ -108,6 +110,41 @@ const host = Astro.url.host;
                   </form>
                 </details>
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )}
+
+  {partialRefunds.total > 0 && (
+    <section class={`${cardClass} space-y-3`} data-testid="partial-refunds" aria-labelledby="partial-refunds-title">
+      <h2 id="partial-refunds-title" class="text-xl font-bold text-ink">
+        {partialRefunds.total === 1 ? '1 reembolso parcial detectado' : `${partialRefunds.total} reembolsos parciales detectados`}
+      </h2>
+      <p class="text-base text-muted">PayPal ha devuelto parte de estas donaciones. La parte reembolsada ya no cuenta para su artículo, que puede haber dejado de estar completo. Si el reembolso llega a ser total, la donación se anula sola.{partialRefunds.total > PARTIAL_REFUNDS_LIMIT ? ` Se muestran los ${PARTIAL_REFUNDS_LIMIT} más recientes.` : ''}</p>
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th class={thClass}>Centro</th>
+            <th class={thClass}>Artículo</th>
+            <th class={thClass}>Donación</th>
+            <th class={thClass}>Reembolsado</th>
+            <th class={thClass}>Cuenta ahora</th>
+            <th class={thClass}>PayPal</th>
+            <th class={thClass}>Detectado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {partialRefunds.rows.map((refund) => (
+            <tr data-donation-id={refund.id}>
+              <td class={tdClass} data-label="Centro"><a href={`/${refund.center_slug}/admin/donations`} class="font-semibold text-brand underline-offset-4 hover:underline">{refund.center_name}</a></td>
+              <td class={tdClass} data-label="Artículo">{refund.item_name}</td>
+              <td class={`${tdClass} tabular`} data-label="Donación">{formatEuro(Number(refund.amount))}</td>
+              <td class={`${tdClass} tabular`} data-label="Reembolsado"><span class={chipClass.warn}>{formatEuro(Number(refund.refunded_amount))}</span></td>
+              <td class={`${tdClass} tabular`} data-label="Cuenta ahora">{formatEuro(countedAmount(refund.amount, refund.refunded_amount))}</td>
+              <td class={`${tdClass} font-mono text-sm`} data-label="PayPal">Cobro {refund.paypal_capture_id}</td>
+              <td class={tdClass} data-label="Detectado">{refund.refunded_at ? formatDateTime(refund.refunded_at) : '—'}</td>
             </tr>
           ))}
         </tbody>
