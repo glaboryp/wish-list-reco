@@ -43,7 +43,14 @@ import {
 import { listAudit, recordAudit } from '../../lib/repo/audit';
 import { bumpSessionVersion, getSessionVersion } from '../../lib/repo/sessions';
 import { reconcilePendingCaptures } from '../../lib/paypal-reconcile';
-import { listUnresolvedCaptures, recordPendingCapture } from '../../lib/repo/pending-captures';
+import {
+  listReconcilableCaptures,
+  listUnresolvedCaptures,
+  pruneFinishedCaptures,
+  recordPendingCapture,
+  resolveCaptureManually,
+  resolvePendingCapture,
+} from '../../lib/repo/pending-captures';
 import { addCenterUser, findMembership, removeCenterUser } from '../../lib/repo/users';
 
 const itemInput = {
@@ -646,6 +653,80 @@ describe.skipIf(!databaseUrl)('reconciling PayPal captures', () => {
     const unresolved = (await listUnresolvedCaptures()).filter((row) => row.center_id === center);
     expect(unresolved.map((row) => row.paypal_order_id)).toEqual([order('approved')]);
     expect(unresolved[0].item_name).toBe('Cáliz');
+  });
+
+  it('never records an order the superadmin resolved by hand, even if PayPal completes it later', async () => {
+    const id = order('manual');
+    await recordPendingCapture({ orderId: id, centerId: center, itemId: item, amount: '20.00' });
+    await age(id, '2 days');
+    expect((await listUnresolvedCaptures()).map((row) => row.paypal_order_id)).toContain(id);
+
+    expect(await resolveCaptureManually({ orderId: id, note: 'apuntada a mano', actorEmail: 'boss@example.org' })).toMatchObject({ center_id: center, amount: '20.00' });
+    expect(await resolveCaptureManually({ orderId: id, note: 'otra vez', actorEmail: 'boss@example.org' })).toBeNull();
+    const [row] = await sql`SELECT status, resolution_note, resolved_by, resolved_at FROM pending_captures WHERE paypal_order_id = ${id}`;
+    expect(row).toMatchObject({ status: 'resolved', resolution_note: 'apuntada a mano', resolved_by: 'boss@example.org' });
+    expect(row.resolved_at).not.toBeNull();
+    expect((await listUnresolvedCaptures()).map((r) => r.paypal_order_id)).not.toContain(id);
+
+    const manualCapture = `CAP-${suffix}-manual`;
+    mockLookupOrder.mockResolvedValue({ state: 'completed', capture: { ...capture, captureId: manualCapture } });
+    expect(await run()).toMatchObject({ recorded: 0 });
+    await resolvePendingCapture(id, 'recorded');
+    expect(await status(id)).toBe('resolved');
+    expect(await sql`SELECT 1 FROM donations WHERE paypal_capture_id = ${manualCapture}`).toHaveLength(0);
+  });
+
+  it('flags a completed capture for an item outside the center, keeping the capture id for the admin list', async () => {
+    const id = order('foreign');
+    const foreignCapture = `CAP-${suffix}-foreign`;
+    await recordPendingCapture({ orderId: id, centerId: center, itemId: item, amount: '5.00' });
+    await age(id, '10 minutes');
+    mockLookupOrder.mockImplementation(async (_credentials: unknown, orderId: string) =>
+      orderId === id
+        ? { state: 'completed', capture: { ...capture, captureId: foreignCapture, itemId: '00000000-0000-4000-8000-000000000000' } }
+        : { state: 'not_found' },
+    );
+
+    await run();
+    expect(await status(id)).toBe('needs_review');
+    const flagged = (await listUnresolvedCaptures()).find((row) => row.paypal_order_id === id);
+    expect(flagged?.paypal_capture_id).toBe(foreignCapture);
+    expect(await sql`SELECT 1 FROM donations WHERE paypal_capture_id = ${foreignCapture}`).toHaveLength(0);
+  });
+
+  it('pages through reconcilable orders with a stable cursor', async () => {
+    const ids = ['page-a', 'page-b', 'page-c'].map(order);
+    for (const id of ids) {
+      await recordPendingCapture({ orderId: id, centerId: center, itemId: item, amount: '1.00' });
+    }
+    await sql`UPDATE pending_captures SET created_at = '2001-01-01T00:00:00.123456Z' WHERE paypal_order_id = ANY(${ids})`;
+
+    const first = await listReconcilableCaptures(5, 2);
+    expect(first.map((row) => row.paypal_order_id)).toEqual(ids.slice(0, 2));
+    const last = first[1];
+    const second = await listReconcilableCaptures(5, 2, { cursor: last.cursor, orderId: last.paypal_order_id });
+    expect(second[0].paypal_order_id).toBe(ids[2]);
+    await sql`DELETE FROM pending_captures WHERE paypal_order_id = ANY(${ids})`;
+  });
+
+  it('prunes finished rows older than 30 days but keeps open and hand-resolved ones', async () => {
+    const ids = { paid: order('old-paid'), gone: order('old-gone'), open: order('old-open'), review: order('old-review'), manual: order('old-manual') };
+    for (const id of Object.values(ids)) {
+      await recordPendingCapture({ orderId: id, centerId: center, itemId: item, amount: '1.00' });
+    }
+    await sql`UPDATE pending_captures SET status = 'recorded' WHERE paypal_order_id = ${ids.paid}`;
+    await sql`UPDATE pending_captures SET status = 'not_paid' WHERE paypal_order_id = ${ids.gone}`;
+    await sql`UPDATE pending_captures SET status = 'needs_review' WHERE paypal_order_id = ${ids.review}`;
+    await sql`UPDATE pending_captures SET status = 'resolved' WHERE paypal_order_id = ${ids.manual}`;
+    await sql`UPDATE pending_captures SET created_at = NOW() - interval '31 days' WHERE paypal_order_id = ANY(${Object.values(ids)})`;
+
+    expect(await pruneFinishedCaptures()).toBeGreaterThanOrEqual(2);
+    expect(await status(ids.paid)).toBeUndefined();
+    expect(await status(ids.gone)).toBeUndefined();
+    expect(await status(ids.open)).toBe('pending');
+    expect(await status(ids.review)).toBe('needs_review');
+    expect(await status(ids.manual)).toBe('resolved');
+    await sql`DELETE FROM pending_captures WHERE paypal_order_id = ANY(${Object.values(ids)})`;
   });
 });
 

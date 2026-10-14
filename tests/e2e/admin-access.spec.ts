@@ -62,6 +62,24 @@ test.describe('admin access control', () => {
         expect((await page.goto('/otro/admin'))?.status()).toBe(200);
     });
 
+    test('the superadmin sees unrecorded PayPal orders with their ids and can mark one as resolved', async ({ page, context }) => {
+        await signIn(context, 'boss@example.org');
+        await page.goto('/admin');
+        const list = page.getByTestId('unresolved-captures');
+        await expect(list).toContainText('No las apuntes a mano sin más');
+        await expect(list.locator('tr[data-order-id="MOCKORDERSTALE01"]')).toContainText('Pendiente de PayPal');
+        const row = list.locator('tr[data-order-id="MOCKORDERREVIEW1"]');
+        await expect(row).toContainText('Requiere revisión');
+        await expect(row).toContainText('Orden MOCKORDERREVIEW1');
+        await expect(row).toContainText('Cobro MOCKCAPTURE01');
+
+        await row.locator('summary').click();
+        await row.getByLabel('Qué has comprobado').fill('reembolsado en PayPal, no se apunta');
+        page.once('dialog', (dialog) => dialog.accept());
+        await row.getByRole('button', { name: 'Marcar como resuelta' }).click();
+        await expect(page.getByText('Orden marcada como resuelta')).toBeVisible();
+    });
+
     test('cross-origin writes are blocked', async ({ request }) => {
         const response = await request.post('/api/auth/logout', {
             headers: { origin: 'https://evil.example.com' },

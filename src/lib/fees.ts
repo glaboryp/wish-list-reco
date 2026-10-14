@@ -41,3 +41,8 @@ export function amountWithFees(net: number, source: PaymentSource, schedule: Fee
   const { rate, fixed } = schedule[source];
   return fromCents(Math.round((toCents(net) + toCents(fixed)) / (1 - rate)));
 }
+
+export function normalizeDonationAmount(raw: unknown): number {
+  const value = Math.floor(typeof raw === 'number' ? raw : Number(String(raw ?? '').trim() || NaN));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}

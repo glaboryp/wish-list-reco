@@ -41,6 +41,10 @@ Copia `.env.example` a `.env` y rellénalo:
 
 `vercel.json` programa una llamada diaria a `GET /api/cron/paypal-sync` (cabecera `Authorization: Bearer $CRON_SECRET`; sin ella responde 401). Cada ejecución concilia las capturas pendientes y comprueba en PayPal las donaciones vigentes de los últimos 90 días (máx. 100 por centro): anula las reembolsadas por completo (motivo "Reembolso en PayPal", sin usuario) y lista las reembolsadas parcialmente en el resumen JSON, que también queda en los logs de Vercel, para revisarlas a mano.
 
+La conciliación recorre todas las órdenes pendientes en tandas de 50 (4 consultas a PayPal a la vez) hasta agotar un presupuesto de 30 segundos; lo que quede se revisa al día siguiente y el resumen indica `timedOut: true`. Las funciones tienen `maxDuration: 60` en `astro.config.mjs`. Al empezar borra las filas `recorded` y `not_paid` de más de 30 días. Si recupera una donación nueva envía los mismos avisos por correo que el pago normal. Una orden completada con el cobro aún `PENDING` en PayPal se queda pendiente hasta que PayPal lo confirme; si el cobro aparece reembolsado o fallido, no se apunta y pasa a revisión.
+
+En `/admin`, el superadministrador ve las órdenes pendientes de más de 24 horas y las que requieren revisión, con el número de orden y de cobro de PayPal. Para apuntar una a mano, primero hay que marcarla como resuelta (con una nota): desde ese momento la conciliación no la registrará aunque PayPal confirme el cobro, así que no se cuenta dos veces.
+
 ## Desarrollo local
 
 `pnpm dev` carga `.env.development` (versionado, sin secretos reales), que apunta a la base de datos local de Docker y sustituye a la de `.env`. Así el desarrollo nunca toca producción. Pasos:

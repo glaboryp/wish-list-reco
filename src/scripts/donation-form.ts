@@ -1,15 +1,16 @@
-import { amountWithFees, type FeeSchedule, type PaymentSource } from '../lib/fees';
+import { amountWithFees, normalizeDonationAmount, type FeeSchedule, type PaymentSource } from '../lib/fees';
 
 interface PayPalActions {
     resolve: () => Promise<void>;
     reject: () => Promise<void>;
+    restart?: () => Promise<void>;
 }
 
 interface PayPalButtonConfig {
     onClick: (data: unknown, actions: PayPalActions) => Promise<void>;
     createOrder: (data: unknown, actions: PayPalActions) => Promise<string>;
     onCancel: () => void;
-    onApprove: (data: { orderID: string }) => Promise<void>;
+    onApprove: (data: { orderID: string }, actions?: PayPalActions) => Promise<void>;
     onError: (err: unknown) => void;
 }
 
@@ -81,6 +82,7 @@ export function initDonationForm(options: DonationFormOptions): void {
 
     const form = byId(`${buttonId}-form`);
     const thanks = byId(`${buttonId}-thanks`);
+    const processing = byId(`${buttonId}-processing`);
     const amountInput = byId<HTMLInputElement>(inputId);
     const paypalContainer = byId(`${buttonId}-paypal`);
     const cardContainer = byId(`${buttonId}-card`);
@@ -98,7 +100,7 @@ export function initDonationForm(options: DonationFormOptions): void {
         return;
     }
 
-    const parsedAmount = () => parseFloat(amountInput.value) || 0;
+    const parsedAmount = () => normalizeDonationAmount(amountInput.value);
     const isValidAmount = (value: number) => value >= 1 && value <= maxDonation;
 
     function updateFeeUI() {
@@ -134,7 +136,11 @@ export function initDonationForm(options: DonationFormOptions): void {
 
     const presetButtons = Array.from(form.querySelectorAll<HTMLButtonElement>('[data-amount]'));
     amountInput.addEventListener('input', validateAmount);
-    amountInput.addEventListener('change', validateAmount);
+    amountInput.addEventListener('change', () => {
+        const normalized = parsedAmount();
+        if (normalized > 0 && amountInput.value !== String(normalized)) amountInput.value = String(normalized);
+        validateAmount();
+    });
     amountInput.addEventListener('input', () => {
         presetButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.amount === amountInput.value)));
     });
@@ -175,7 +181,7 @@ export function initDonationForm(options: DonationFormOptions): void {
         const onClick: PayPalButtonConfig['onClick'] = (_data, actions) => {
             if (isProcessing) return actions.reject();
 
-            if (!isValidAmount(parseFloat(amountInput!.value))) {
+            if (!isValidAmount(parsedAmount())) {
                 showToast('Por favor, introduce una cantidad válida');
                 return actions.reject();
             }
@@ -190,9 +196,9 @@ export function initDonationForm(options: DonationFormOptions): void {
         };
 
         const createOrder = async (source: PaymentSource): Promise<string> => {
-            const value = Math.max(1, Math.floor(Number(amountInput!.value) || 0));
-            if (value > maxDonation) {
-                showToast(`La cantidad máxima que puedes donar es ${maxDonation}€`);
+            const value = parsedAmount();
+            if (!isValidAmount(value)) {
+                showToast(value > maxDonation ? `La cantidad máxima que puedes donar es ${maxDonation}€` : 'Por favor, introduce una cantidad válida');
                 return Promise.reject();
             }
 
@@ -230,12 +236,24 @@ export function initDonationForm(options: DonationFormOptions): void {
             thanks.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };
 
+        const showProcessing = (message: string) => {
+            if (!processing) {
+                showToast(message, 'success');
+                return;
+            }
+            const text = processing.querySelector('[data-processing-message]');
+            if (text) text.textContent = message;
+            form!.classList.add('hidden');
+            processing.classList.remove('hidden');
+            processing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+
         const failCapture = (message: string) => {
             stopProcessing();
             showToast(message);
         };
 
-        const onApprove: PayPalButtonConfig['onApprove'] = async (data) => {
+        const onApprove: PayPalButtonConfig['onApprove'] = async (data, actions) => {
             for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt++) {
                 const last = attempt === CAPTURE_ATTEMPTS;
                 try {
@@ -246,7 +264,12 @@ export function initDonationForm(options: DonationFormOptions): void {
                     });
                     const json = await response.json();
 
+                    if (response.status === 202 && json.pending) return showProcessing(json.message);
                     if (response.ok) return showThanks();
+                    if (json.code === 'INSTRUMENT_DECLINED' && actions?.restart) {
+                        showToast(json.error);
+                        return actions.restart();
+                    }
                     if (response.status < 500 || last) return failCapture(json.error || 'Error al procesar el pago');
                 } catch {
                     if (last) return failCapture('Error de red al capturar el pago');

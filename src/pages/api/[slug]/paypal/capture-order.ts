@@ -1,22 +1,27 @@
 import type { APIRoute } from 'astro';
-import { captureOrder, credentialsFor, lookupOrder, type CaptureResult } from '../../../../lib/paypal';
-import { recordCapture } from '../../../../lib/paypal-reconcile';
+import { captureOrder, credentialsFor, declinedPayment, lookupOrder, type CaptureState } from '../../../../lib/paypal';
+import { creditedAmount, recordCapture } from '../../../../lib/paypal-reconcile';
 import { getCenterWithSecret } from '../../../../lib/repo/centers';
 import { notifyDonation } from '../../../../lib/email/notify';
-import { resolvePendingCapture } from '../../../../lib/repo/pending-captures';
+import { resolvePendingCapture, touchPendingCapture } from '../../../../lib/repo/pending-captures';
 
-async function recoverCapture(credentials: Parameters<typeof lookupOrder>[0], orderId: string): Promise<CaptureResult | null> {
+const PROCESSING_MESSAGE =
+  'PayPal está terminando de procesar tu pago. No hace falta que vuelvas a pagar: la donación aparecerá en la web en cuanto PayPal la confirme.';
+const UNCONFIRMED_MESSAGE =
+  'No hemos podido confirmar tu pago. No lo repitas: revisa tu cuenta de PayPal o tu banco y, si ves el cargo, escríbenos.';
+
+async function recoverCapture(credentials: Parameters<typeof lookupOrder>[0], orderId: string): Promise<CaptureState | null> {
   try {
     const lookup = await lookupOrder(credentials, orderId);
-    return lookup.state === 'completed' ? lookup.capture : null;
+    return lookup.state === 'not_completed' || lookup.state === 'not_found' ? null : lookup;
   } catch (error) {
     console.error('Error consultando la orden en PayPal', error);
     return null;
   }
 }
 
-async function flagForReview(orderId: string, reason: string) {
-  await resolvePendingCapture(orderId, 'needs_review', reason).catch((error) =>
+async function flagForReview(orderId: string, reason: string, captureId: string | null = null) {
+  await resolvePendingCapture(orderId, 'needs_review', reason, captureId).catch((error) =>
     console.error('Error marcando captura para revisión', error),
   );
 }
@@ -43,15 +48,33 @@ export const POST: APIRoute = async ({ params, request }) => {
     return json({ error: 'Este centro todavía no acepta donaciones' }, 503);
   }
 
-  let capture: CaptureResult;
+  let state: CaptureState;
   try {
-    capture = await captureOrder(credentials, orderID);
+    state = await captureOrder(credentials, orderID);
   } catch (error) {
+    const declined = declinedPayment(error);
+    if (declined) {
+      console.warn('Pago rechazado por PayPal', orderID, declined.code);
+      return json({ error: declined.message, code: declined.code }, 422);
+    }
     console.error('Error en captura PayPal', error);
     const recovered = await recoverCapture(credentials, orderID);
     if (!recovered) return json({ error: 'Fallo al capturar la orden' }, 500);
-    capture = recovered;
+    state = recovered;
   }
+
+  if (state.state === 'capture_pending') {
+    await touchPendingCapture(orderID, `capture ${state.captureId} PENDING in PayPal`, state.captureId).catch((error) =>
+      console.error('Error anotando captura en proceso', error),
+    );
+    return json({ pending: true, message: PROCESSING_MESSAGE, captureId: state.captureId }, 202);
+  }
+  if (state.state === 'capture_failed') {
+    console.error('Orden completada con captura no cobrada', orderID, state.captureId, state.status);
+    await flagForReview(orderID, `capture ${state.captureId} ${state.status} in PayPal, not credited`, state.captureId);
+    return json({ error: UNCONFIRMED_MESSAGE, paymentId: state.captureId }, 409);
+  }
+  const capture = state.capture;
 
   const failure = {
     error: 'Pago capturado pero error al registrar la donación',
@@ -70,25 +93,25 @@ export const POST: APIRoute = async ({ params, request }) => {
 
   if (outcome === 'unsupported_currency') {
     console.error('Captura PayPal en divisa no admitida, no registrada', failure, capture.currency);
-    await flagForReview(orderID, outcome);
+    await flagForReview(orderID, outcome, capture.captureId);
     return json(failure, 500);
   }
   if (outcome === 'item_not_found') {
     console.error('Donación capturada para un artículo que no pertenece al centro', failure);
-    await flagForReview(orderID, outcome);
+    await flagForReview(orderID, outcome, capture.captureId);
     return json(failure, 500);
   }
   await resolvePendingCapture(orderID, 'recorded').catch((error) => console.error('Error cerrando captura pendiente', error));
 
-  const creditedAmount = capture.donationAmount ?? capture.amount;
+  const amount = creditedAmount(capture);
 
   if (outcome === 'created') {
-    await notifyDonation({ center, itemId: capture.itemId, amount: creditedAmount, donorEmail: capture.payerEmail });
+    await notifyDonation({ center, itemId: capture.itemId, amount, donorEmail: capture.payerEmail });
   }
 
   return json({
     ok: true,
-    amount: creditedAmount,
+    amount,
     chargedAmount: capture.amount,
     currency: capture.currency,
     itemId: capture.itemId,

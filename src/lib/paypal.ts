@@ -20,9 +20,33 @@ export class PayPalError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly issue?: string,
   ) {
     super(message);
   }
+}
+
+const issueOf = (data: any): string | undefined => {
+  const issue = data?.details?.[0]?.issue ?? data?.name;
+  return typeof issue === 'string' ? issue : undefined;
+};
+
+const DECLINED_ISSUES = new Set([
+  'INSTRUMENT_DECLINED',
+  'TRANSACTION_REFUSED',
+  'PAYER_CANNOT_PAY',
+  'CARD_EXPIRED',
+  'PAYER_ACTION_REQUIRED',
+  'REDIRECT_PAYER_FOR_ALTERNATE_FUNDING',
+  'MAX_NUMBER_OF_PAYMENT_ATTEMPTS_EXCEEDED',
+]);
+
+export const DECLINED_MESSAGE =
+  'PayPal no ha aceptado este medio de pago y no se ha cobrado nada. Prueba con otra tarjeta o con otra forma de pago.';
+
+export function declinedPayment(error: unknown): { code: string; message: string } | null {
+  if (!(error instanceof PayPalError) || !error.issue || !DECLINED_ISSUES.has(error.issue)) return null;
+  return { code: error.issue, message: DECLINED_MESSAGE };
 }
 
 export function apiBase(env: PayPalEnv): string {
@@ -114,11 +138,16 @@ export async function createOrder(
     }),
   });
   const data = await safeJson(res);
-  if (!res.ok || !data.id) throw new PayPalError('order creation failed', res.status);
+  if (!res.ok || !data.id) throw new PayPalError('order creation failed', res.status, issueOf(data));
   return data.id;
 }
 
-export async function captureOrder(credentials: PayPalCredentials, orderId: string): Promise<CaptureResult> {
+export type CaptureState =
+  | { state: 'completed'; capture: CaptureResult }
+  | { state: 'capture_pending'; captureId: string }
+  | { state: 'capture_failed'; captureId: string; status: string };
+
+export async function captureOrder(credentials: PayPalCredentials, orderId: string): Promise<CaptureState> {
   const token = await accessToken(credentials);
   const base = `${apiBase(credentials.env)}/v2/checkout/orders/${encodeURIComponent(orderId)}`;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -128,34 +157,44 @@ export async function captureOrder(credentials: PayPalCredentials, orderId: stri
   data = await safeJson(res);
   if (!res.ok) {
     const alreadyCaptured = data?.details?.some((d: any) => d.issue === 'ORDER_ALREADY_CAPTURED');
-    if (!alreadyCaptured) throw new PayPalError('capture failed', res.status);
+    if (!alreadyCaptured) throw new PayPalError('capture failed', res.status, issueOf(data));
     const readBack = await fetch(base, { headers });
     data = await safeJson(readBack);
     if (!readBack.ok) throw new PayPalError('order lookup failed', readBack.status);
   }
 
-  return completedCapture(data);
+  return captureState(data);
 }
 
-function completedCapture(data: any): CaptureResult {
+function captureState(data: any): CaptureState {
   if (data.status !== 'COMPLETED') throw new PayPalError(`order not completed: ${data.status}`);
-  const captures = data.purchase_units?.[0]?.payments?.captures ?? [];
-  const capture = captures.find((c: any) => c.status === 'COMPLETED');
-  if (!capture?.id || !capture.amount?.value || !capture.custom_id) {
+  const captures: any[] = data.purchase_units?.[0]?.payments?.captures ?? [];
+  const capture = captures.find((c) => c.status === 'COMPLETED');
+  if (!capture) {
+    const other = captures.find((c) => c.status === 'PENDING') ?? captures[0];
+    if (!other?.id) throw new PayPalError('incomplete capture data');
+    return other.status === 'PENDING'
+      ? { state: 'capture_pending', captureId: other.id }
+      : { state: 'capture_failed', captureId: other.id, status: String(other.status) };
+  }
+  if (!capture.id || !capture.amount?.value || !capture.custom_id) {
     throw new PayPalError('incomplete capture data');
   }
   const { itemId, donationAmount } = parseCustomId(capture.custom_id, capture.amount.value);
   return {
-    captureId: capture.id,
-    amount: capture.amount.value,
-    currency: capture.amount.currency_code,
-    itemId,
-    donationAmount,
-    payerEmail: typeof data.payer?.email_address === 'string' ? data.payer.email_address : null,
+    state: 'completed',
+    capture: {
+      captureId: capture.id,
+      amount: capture.amount.value,
+      currency: capture.amount.currency_code,
+      itemId,
+      donationAmount,
+      payerEmail: typeof data.payer?.email_address === 'string' ? data.payer.email_address : null,
+    },
   };
 }
 
-export type OrderLookup = { state: 'completed'; capture: CaptureResult } | { state: 'not_completed'; status: string } | { state: 'not_found' };
+export type OrderLookup = CaptureState | { state: 'not_completed'; status: string } | { state: 'not_found' };
 
 export async function lookupOrder(credentials: PayPalCredentials, orderId: string): Promise<OrderLookup> {
   const token = await accessToken(credentials);
@@ -166,7 +205,7 @@ export async function lookupOrder(credentials: PayPalCredentials, orderId: strin
   const data = await safeJson(res);
   if (!res.ok) throw new PayPalError('order lookup failed', res.status);
   if (data.status !== 'COMPLETED') return { state: 'not_completed', status: String(data.status) };
-  return { state: 'completed', capture: completedCapture(data) };
+  return captureState(data);
 }
 
 export type CaptureRefundState = 'refunded' | 'partially_refunded' | 'not_refunded' | 'not_found';

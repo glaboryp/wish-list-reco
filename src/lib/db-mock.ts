@@ -46,6 +46,11 @@ const auditRows = [
   { id: '66666666-6666-4666-8666-666666666661', center_id: RECOLETOS_ID, actor_email: 'second@example.org', action: 'appearance.update', entity_type: 'center', entity_id: RECOLETOS_ID, summary: 'Apariencia actualizada', created_at: '2026-10-01T10:00:00Z' },
 ];
 
+const pendingCaptures = [
+  { paypal_order_id: 'MOCKORDERSTALE01', center_id: RECOLETOS_ID, item_id: ITEM_ID, amount: '10.66', status: 'pending', attempts: 2, last_error: 'order APPROVED', paypal_capture_id: null, created_at: '2026-10-01T09:00:00Z', item_name: 'Cáliz' },
+  { paypal_order_id: 'MOCKORDERREVIEW1', center_id: RECOLETOS_ID, item_id: ITEM_ID, amount: '20.00', status: 'needs_review', attempts: 1, last_error: 'capture MOCKCAPTURE01 REFUNDED in PayPal, not credited', paypal_capture_id: 'MOCKCAPTURE01', created_at: '2026-10-02T09:00:00Z', item_name: 'Cáliz' },
+];
+
 const nearlyDoneItem = {
   ...item,
   id: '33333333-3333-4333-8333-333333333334',
@@ -80,6 +85,11 @@ export function mockSql(strings: TemplateStringsArray, ...values: unknown[]) {
     if (text.includes('COUNT(*)')) return [{ total: has(RECOLETOS_ID) ? '2' : '0' }];
     return has(RECOLETOS_ID) ? auditRows : [];
   }
+  if (text.includes('UPDATE pending_captures') && text.includes("'resolved'")) {
+    const found = pendingCaptures.find((row) => has(row.paypal_order_id));
+    return found ? [{ center_id: found.center_id, amount: found.amount }] : [];
+  }
+  if (text.includes('FROM pending_captures p')) return pendingCaptures;
   if (text.includes('rate_limits')) {
     return [{ count: 1, retry_after: 1 }];
   }
