@@ -87,6 +87,16 @@ describe('sendDonationEmails', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('logs only the status when Resend fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockResolvedValue({ ok: false, status: 422, text: async () => 'invalid d@example.org' });
+    await sendDonationEmails({ data, managerEmails: [], donorEmail: 'd@example.org' });
+    const logged = JSON.stringify(error.mock.calls.flat().map((arg) => (arg instanceof Error ? { ...arg, message: arg.message } : arg)));
+    expect(logged).not.toContain('d@example.org');
+    expect(logged).toContain('422');
+    error.mockRestore();
+  });
+
   it('only logs failures and still sends the other email', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
@@ -156,6 +166,27 @@ describe('SMTP transport', () => {
     expect(sendMail).toHaveBeenCalledTimes(2);
     expect(error).toHaveBeenCalledTimes(1);
     error.mockRestore();
+  });
+
+  it('never writes the donor address to the console when SMTP rejects it', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const failure = Object.assign(new Error("Can't send mail - all recipients were rejected: 550 d@example.org"), {
+      code: 'EENVELOPE',
+      responseCode: 550,
+      rejected: ['d@example.org'],
+      response: '550 5.1.1 <d@example.org> user unknown',
+      command: 'RCPT TO',
+    });
+    sendMail.mockRejectedValue(failure);
+    await sendDonationEmails({ data, managerEmails: [], donorEmail: 'd@example.org' });
+    const logged = JSON.stringify([...error.mock.calls, ...log.mock.calls].flat().map((arg) => (arg instanceof Error ? { ...arg, message: arg.message, stack: arg.stack } : arg)));
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(logged).not.toContain('d@example.org');
+    expect(logged).toContain('EENVELOPE');
+    expect(logged).toContain('550');
+    error.mockRestore();
+    log.mockRestore();
   });
 
   it('sends nothing without credentials', async () => {
