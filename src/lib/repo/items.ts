@@ -13,7 +13,7 @@ export async function listPublicItems(centerId: string): Promise<WishlistItem[]>
       img.image_url, img.alt_text
     FROM items i
     LEFT JOIN LATERAL (
-      SELECT COALESCE(SUM(d.amount), 0) AS raised_amount, COUNT(*) AS donor_count
+      SELECT COALESCE(SUM(d.amount - d.refunded_amount), 0) AS raised_amount, COUNT(*) AS donor_count
       FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL
     ) dn ON true
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
@@ -31,7 +31,7 @@ export async function getPublicItem(centerId: string, itemId: string): Promise<W
       img.image_url, img.alt_text
     FROM items i
     LEFT JOIN LATERAL (
-      SELECT COALESCE(SUM(d.amount), 0) AS raised_amount, COUNT(*) AS donor_count
+      SELECT COALESCE(SUM(d.amount - d.refunded_amount), 0) AS raised_amount, COUNT(*) AS donor_count
       FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL
     ) dn ON true
     LEFT JOIN item_images img ON img.item_id = i.id AND img.sort_order = 0
@@ -69,7 +69,7 @@ export async function listAdminItems(centerId: string): Promise<AdminItem[]> {
   const rows = await sql`
     SELECT
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
+      COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id) AS donation_count,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id AND NOT (d.source = 'manual' AND d.voided_at IS NOT NULL)) AS blocking_donation_count,
       img.image_url, img.alt_text
@@ -85,7 +85,7 @@ export async function getAdminItem(centerId: string, itemId: string): Promise<Ad
   const rows = await sql`
     SELECT
       i.id, i.name, i.description, i.goal_amount, i.status, i.sort_order,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
+      COALESCE((SELECT SUM(d.amount - d.refunded_amount) FROM donations d WHERE d.item_id = i.id AND d.voided_at IS NULL), 0) AS raised_amount,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id) AS donation_count,
       (SELECT COUNT(*) FROM donations d WHERE d.item_id = i.id AND NOT (d.source = 'manual' AND d.voided_at IS NOT NULL)) AS blocking_donation_count,
       img.image_url, img.alt_text

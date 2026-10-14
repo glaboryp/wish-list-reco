@@ -15,7 +15,7 @@ Plataforma web para que varios centros publiquen su propia lista de deseos y rec
 
 - **Superadmin** (el correo de `SUPERADMIN_EMAIL`): en `/admin` crea centros, configura el PayPal de cada uno y da de alta a su primer encargado.
 - **Encargados** (correos dados de alta por centro): en `/<centro>/admin` editan la portada, el logo, el color, los artículos con su precio, registran donaciones manuales y añaden o quitan a otros encargados.
-- Lo recaudado de cada artículo es siempre la suma de su registro de donaciones (`donations`); un artículo está "financiado" cuando esa suma alcanza su precio.
+- Lo recaudado de cada artículo es siempre la suma de su registro de donaciones (`donations`) no anuladas, descontando lo reembolsado parcialmente (`amount - refunded_amount`); un artículo está "financiado" cuando esa suma alcanza su precio.
 - El secret de PayPal se guarda cifrado (AES-256-GCM) y nunca se muestra.
 
 ## Variables de entorno
@@ -39,7 +39,9 @@ Copia `.env.example` a `.env` y rellénalo:
 
 ## Cron de PayPal
 
-`vercel.json` programa una llamada diaria a `GET /api/cron/paypal-sync` (cabecera `Authorization: Bearer $CRON_SECRET`; sin ella responde 401). Cada ejecución concilia las capturas pendientes y comprueba en PayPal las donaciones vigentes de los últimos 90 días (máx. 100 por centro): anula las reembolsadas por completo (motivo "Reembolso en PayPal", sin usuario) y lista las reembolsadas parcialmente en el resumen JSON, que también queda en los logs de Vercel, para revisarlas a mano.
+`vercel.json` programa una llamada diaria a `GET /api/cron/paypal-sync` (cabecera `Authorization: Bearer $CRON_SECRET`; sin ella responde 401). Cada ejecución concilia las capturas pendientes y comprueba en PayPal las donaciones vigentes de los últimos 90 días (máx. 100 por centro): anula las reembolsadas por completo (motivo "Reembolso en PayPal", sin usuario) y descuenta las reembolsadas parcialmente. El resumen JSON, que también queda en los logs de Vercel, incluye `partialRefunds` (detectados y actualizados) y el detalle de cada una.
+
+Reembolsos parciales: PayPal informa del importe bruto devuelto (la suma de los reembolsos `COMPLETED` del cobro, que se leen de la orden enlazada desde el cobro, `GET /v2/checkout/orders/{id}` → `purchase_units[].payments.refunds[]`). Como el bruto incluye la comisión que cubrió la donante, a la donación se le atribuye la parte proporcional: `reembolsado = redondeo(bruto_reembolsado × amount / (amount + fee_amount))`, al céntimo y como máximo `amount`. Se guarda en `refunded_amount` (con `refunded_at`) y deja de contar para el artículo, que puede dejar de estar completo; la donante sigue contando. Volver a ejecutar el proceso no cambia nada si PayPal no ha cambiado; si el reembolso crece se actualiza, y si pasa a ser total la donación se anula como siempre. Cada cambio deja una entrada `donation.partial_refund` en el historial del centro (autor "PayPal (automático)"), el panel de donaciones lo marca con «Reembolso parcial» y el superadministrador ve en `/admin` los 20 más recientes. El CSV incluye las columnas «Reembolsado» y «Neto tras reembolsos».
 
 La conciliación recorre todas las órdenes pendientes en tandas de 50 (4 consultas a PayPal a la vez) hasta agotar un presupuesto de 30 segundos; lo que quede se revisa al día siguiente y el resumen indica `timedOut: true`. Las funciones tienen `maxDuration: 60` en `astro.config.mjs`. Al empezar borra las filas `recorded` y `not_paid` de más de 30 días. Si recupera una donación nueva envía los mismos avisos por correo que el pago normal. Una orden completada con el cobro aún `PENDING` en PayPal se queda pendiente hasta que PayPal lo confirme; si el cobro aparece reembolsado o fallido, no se apunta y pasa a revisión.
 

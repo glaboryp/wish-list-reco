@@ -70,6 +70,18 @@ test.describe('admin access control', () => {
         await expect(section).toContainText('Sesión cerrada en todos los dispositivos');
     });
 
+    test('the superadmin is warned about partial PayPal refunds', async ({ page, context }) => {
+        await signIn(context, 'boss@example.org');
+        await page.goto('/admin');
+        const section = page.getByTestId('partial-refunds');
+        await expect(section.getByRole('heading', { name: '1 reembolso parcial detectado' })).toBeVisible();
+        const row = section.locator('tr[data-donation-id="55555555-5555-4555-8555-555555555551"]');
+        await expect(row).toContainText('Recoletos');
+        await expect(row).toContainText('2,50');
+        await expect(row).toContainText('10,00');
+        await expect(row).toContainText('MOCKCAPTUREPART1');
+    });
+
     test('the superadmin sees unrecorded PayPal orders with their ids and can mark one as resolved', async ({ page, context }) => {
         await signIn(context, 'boss@example.org');
         await page.goto('/admin');
@@ -229,6 +241,11 @@ test.describe('donations panel', () => {
         await expect(page.getByLabel('Filtrar por artículo')).toBeVisible();
         await expect(page.getByText(/2 donaciones, 25,00/)).toBeVisible();
 
+        const refunded = page.locator('tbody tr').filter({ hasText: 'Reembolso parcial' });
+        await expect(refunded).toHaveCount(1);
+        await expect(refunded).toContainText('12,50');
+        await expect(refunded).toContainText('Reembolsado 2,50 € · cuenta 10,00 €');
+
         expect((await page.goto('/recoletos/admin/donations?page=999&item=nope'))?.status()).toBe(200);
         await expect(page.getByText(/2 donaciones/)).toBeVisible();
         await expect(page.getByRole('navigation', { name: 'Paginación' })).toHaveCount(0);
@@ -310,6 +327,7 @@ test.describe('admin dashboard', () => {
         await expect(page.locator('[data-section="near-completion"]')).toContainText('Casulla');
         await expect(page.locator('[data-section="near-completion"]')).not.toContainText('Cáliz');
         await expect(page.locator('[data-section="recent"] tbody tr')).toHaveCount(2);
+        await expect(page.locator('[data-section="recent"]')).toContainText('Reembolsado 2,50 € · cuenta 10,00 €');
     });
 });
 
@@ -333,8 +351,8 @@ test.describe('donations CSV export', () => {
         expect(response.headers()['content-disposition']).toContain('attachment');
         const body = await response.text();
         expect(body.startsWith('\uFEFFFecha;Art')).toBe(true);
-        expect(body).toContain(';10,00;0,66;PayPal;vigente;');
-        expect(body).toContain(';15,00;0,00;Manual;vigente;');
+        expect(body).toContain(';12,50;0,66;2,50;10,00;PayPal;reembolso parcial;');
+        expect(body).toContain(';15,00;0,00;0,00;15,00;Manual;vigente;');
     });
 
     test('the export link keeps the item filter', async ({ page, context }) => {

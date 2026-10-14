@@ -3,7 +3,7 @@ import AdminLayout from "../../../layouts/AdminLayout.astro";
 import EmptyState from "../../../components/admin/EmptyState.astro";
 import { buttonClass, cardClass, secondaryButtonClass, chipClass, dangerButtonClass, formFooterClass, helpClass, inputClass, labelClass, tableClass, tdClass, thClass } from "../../../components/admin/ui";
 import { formatDateTime, formatEuro } from "../../../lib/format";
-import { fromCents, remainingCents } from "../../../lib/money";
+import { countedAmount, fromCents, remainingCents } from "../../../lib/money";
 import { parseManualDonation, parseVoidDonation } from "../../../lib/admin/forms";
 import { guardCenter } from "../../../lib/auth/guard";
 import { recordAudit } from "../../../lib/repo/audit";
@@ -145,7 +145,7 @@ const payable = items
       {itemFilter && <a href={here} class="inline-flex min-h-11 items-center font-semibold text-brand underline-offset-4 hover:underline">Quitar filtro</a>}
     </form>
     <p class="mb-4 text-base text-muted" data-summary>
-      {total} {total === 1 ? 'donación' : 'donaciones'}{itemFilter ? ' de este artículo' : ''}, {formatEuro(activeSum)} en total sin contar las anuladas.
+      {total} {total === 1 ? 'donación' : 'donaciones'}{itemFilter ? ' de este artículo' : ''}, {formatEuro(activeSum)} en total sin contar las anuladas ni lo reembolsado.
     </p>
     {donations.length === 0 ? (
       itemFilter ? (
@@ -189,12 +189,18 @@ const payable = items
                       Cobrado {formatEuro(Number(donation.amount) + Number(donation.fee_amount))}, con {formatEuro(Number(donation.fee_amount))} de comisiones
                     </span>
                   )}
+                  {Number(donation.refunded_amount) > 0 && !donation.voided_at && (
+                    <span class="block text-sm text-muted" data-partial-refund>
+                      Reembolsado {formatEuro(Number(donation.refunded_amount))} · cuenta {formatEuro(countedAmount(donation.amount, donation.refunded_amount))}
+                    </span>
+                  )}
                 </div>
               </td>
               <td class={tdClass} data-label="Cómo llegó">
                 {donation.voided_at
                   ? <span class={chipClass.muted}>Anulada</span>
                   : <span class={donation.source === 'paypal' ? chipClass.info : chipClass.muted}>{donation.source === 'paypal' ? 'PayPal' : 'Apuntada a mano'}</span>}
+                {Number(donation.refunded_amount) > 0 && !donation.voided_at && <span class={`${chipClass.warn} ms-1 mt-1`}>Reembolso parcial</span>}
               </td>
               <td class={tdClass} data-label="Nota">
                 {donation.note ?? ''}

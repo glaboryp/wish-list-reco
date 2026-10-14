@@ -8,6 +8,8 @@ const row = (overrides: Partial<DonationRow> = {}): DonationRow => ({
     item_name: 'Cáliz',
     amount: '10.5',
     fee_amount: '0.66',
+    refunded_amount: '0',
+    refunded_at: null,
     currency: 'EUR',
     source: 'paypal',
     note: 'nota privada',
@@ -49,18 +51,23 @@ describe('formatCsvAmount', () => {
 describe('buildDonationsCsv', () => {
     it('starts with a BOM and the header, uses ; and CRLF', () => {
         const csv = buildDonationsCsv([]);
-        expect(csv).toBe('﻿Fecha;Artículo;Importe neto;Comisión;Origen;Estado;Motivo de anulación\r\n');
+        expect(csv).toBe('﻿Fecha;Artículo;Importe neto;Comisión;Reembolsado;Neto tras reembolsos;Origen;Estado;Motivo de anulación\r\n');
     });
 
     it('writes a live PayPal donation in Madrid time without personal notes', () => {
         const [, line] = buildDonationsCsv([row()]).trimEnd().split('\r\n');
-        expect(line).toMatch(/^"?15\/7\/25,? 1:30"?;Cáliz;10,50;0,66;PayPal;vigente;$/);
+        expect(line).toMatch(/^"?15\/7\/25,? 1:30"?;Cáliz;10,50;0,66;0,00;10,50;PayPal;vigente;$/);
         expect(line).not.toContain('nota privada');
     });
 
     it('marks voided donations with their reason', () => {
         const [, line] = buildDonationsCsv([row({ source: 'manual', fee_amount: '0', voided_at: '2025-07-15T10:00:00Z', void_reason: 'reembolso; error' })]).trimEnd().split('\r\n');
-        expect(line).toContain(';Manual;anulada;"reembolso; error"');
+        expect(line).toContain(';0,00;0,00;Manual;anulada;"reembolso; error"');
+    });
+
+    it('shows a partial refund and what is left counting for the item', () => {
+        const [, line] = buildDonationsCsv([row({ amount: '10.00', refunded_amount: '5.00', refunded_at: '2025-07-20T10:00:00Z' })]).trimEnd().split('\r\n');
+        expect(line).toContain(';10,00;0,66;5,00;5,00;PayPal;reembolso parcial;');
     });
 
     it('guards against formula injection in item names', () => {
