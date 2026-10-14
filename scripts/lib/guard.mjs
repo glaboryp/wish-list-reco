@@ -14,13 +14,17 @@ export function isLocalHost(host) {
   return LOCAL_HOSTS.has(host) || host.endsWith('.localtest.me') || host === 'localtest.me';
 }
 
-function hostFromDotenv(path) {
-  if (!existsSync(path)) return null;
-  const line = readFileSync(path, 'utf8')
+export function normalizeHost(host) {
+  return host.toLowerCase().replace(/-pooler(?=\.)/, '');
+}
+
+function hostsFromDotenv(path) {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8')
     .split('\n')
-    .find((entry) => /^\s*POSTGRES_URL\s*=/.test(entry));
-  if (!line) return null;
-  return hostOf(line.replace(/^\s*POSTGRES_URL\s*=\s*/, '').trim().replace(/^["']|["']$/g, ''));
+    .filter((entry) => /^\s*(export\s+)?POSTGRES_URL(_NON_POOLING)?\s*=/.test(entry))
+    .map((line) => hostOf(line.replace(/^[^=]*=\s*/, '').trim().replace(/^["']|["']$/g, '')))
+    .filter(Boolean);
 }
 
 export function assertSafeDatabase(env = process.env, dotenvPath = '.env') {
@@ -36,13 +40,13 @@ export function assertSafeDatabase(env = process.env, dotenvPath = '.env') {
   const protectedHosts = new Set(
     (env.PRODUCTION_DB_HOST ?? '')
       .split(',')
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean),
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map(normalizeHost),
   );
-  const dotenvHost = hostFromDotenv(dotenvPath);
-  if (dotenvHost) protectedHosts.add(dotenvHost);
+  for (const dotenvHost of hostsFromDotenv(dotenvPath)) protectedHosts.add(normalizeHost(dotenvHost));
 
-  if (protectedHosts.has(host)) {
+  if (protectedHosts.has(normalizeHost(host))) {
     throw new Error('Refusing to run: POSTGRES_URL points at the production database');
   }
   if (env.ALLOW_REMOTE_DB_RESET !== '1') {

@@ -823,3 +823,82 @@ describe.skipIf(!databaseUrl)('reordering, duplicating and batch status', () => 
     expect((await getAdminItem(center, copy))?.name).toHaveLength(120);
   });
 });
+
+describe.skipIf(!databaseUrl)('integrity of deletes and concurrent writes', () => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  let center: string;
+
+  beforeAll(async () => {
+    center = (await createCenter({ slug: `it-int-${suffix}`, name: 'Integrity' }))!.id;
+  });
+
+  afterAll(async () => {
+    await sql`DELETE FROM pending_captures WHERE center_id = ${center}`;
+    await sql`DELETE FROM donations WHERE center_id = ${center}`;
+    await sql`DELETE FROM center_users WHERE center_id = ${center}`;
+    await sql`DELETE FROM items WHERE center_id = ${center}`;
+    await sql`DELETE FROM centers WHERE id = ${center}`;
+  });
+
+  const exists = async (id: string) => (await sql`SELECT 1 FROM items WHERE id = ${id}`).length > 0;
+  const withCapture = async (status: string, age = '1 minute') => {
+    const id = await createItem(center, { ...itemInput, name: `cap-${status}` });
+    const order = `ORD-${suffix}-${Math.random().toString(36).slice(2, 8)}`;
+    await recordPendingCapture({ orderId: order, centerId: center, itemId: id, amount: '5.00' });
+    await sql`UPDATE pending_captures SET status = ${status}, created_at = NOW() - ${age}::interval WHERE paypal_order_id = ${order}`;
+    return { id, order };
+  };
+
+  it('deletes an item whose only pending captures are abandoned or stale', async () => {
+    for (const [status, age] of [['not_paid', '1 minute'], ['recorded', '1 minute'], ['pending', '30 hours']] as const) {
+      const { id, order } = await withCapture(status, age);
+      expect(await removeOrArchiveItem(center, id)).toBe('deleted');
+      expect(await exists(id)).toBe(false);
+      expect(await sql`SELECT 1 FROM pending_captures WHERE paypal_order_id = ${order}`).toHaveLength(0);
+    }
+  });
+
+  it('archives instead of deleting while a payment may still be unrecorded', async () => {
+    for (const [status, age] of [['pending', '1 minute'], ['needs_review', '30 hours']] as const) {
+      const { id, order } = await withCapture(status, age);
+      expect(await removeOrArchiveItem(center, id)).toBe('archived');
+      expect(await exists(id)).toBe(true);
+      expect(await sql`SELECT 1 FROM pending_captures WHERE paypal_order_id = ${order}`).toHaveLength(1);
+    }
+  });
+
+  it('never exceeds the goal when manual donations race', async () => {
+    const id = await createItem(center, { ...itemInput, name: 'race', goal: 100 });
+    const holder = (sql as any).transaction((txn: typeof sql) => [
+      txn`SELECT id FROM items WHERE id = ${id} FOR UPDATE`,
+      txn`SELECT pg_sleep(1)`,
+      txn`INSERT INTO donations (center_id, item_id, amount, currency, source) VALUES (${center}, ${id}, 60, 'EUR', 'manual')`,
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const late = await addManualDonation({ centerId: center, itemId: id, amount: 60, note: 'bizum' });
+    await holder;
+    expect(late).toEqual({ status: 'too_much', remaining: 40 });
+    const [{ total }] = await sql`SELECT SUM(amount) AS total FROM donations WHERE item_id = ${id}`;
+    expect(Number(total)).toBe(60);
+  });
+
+  it('allows concurrent manual donations up to the goal and no further', async () => {
+    const id = await createItem(center, { ...itemInput, name: 'race2', goal: 100 });
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => addManualDonation({ centerId: center, itemId: id, amount: 30, note: 'bizum' })),
+    );
+    expect(results.filter((r) => r.status === 'created')).toHaveLength(3);
+    const [{ total }] = await sql`SELECT SUM(amount) AS total FROM donations WHERE item_id = ${id}`;
+    expect(Number(total)).toBe(90);
+  });
+
+  it('keeps one manager when the last two remove each other', async () => {
+    const a = `a-${suffix}@example.org`;
+    const b = `b-${suffix}@example.org`;
+    await addCenterUser(center, a);
+    await addCenterUser(center, b);
+    const results = await Promise.all([removeCenterUser(center, a), removeCenterUser(center, b)]);
+    expect([...results].sort()).toEqual(['last', 'removed']);
+    expect(await sql`SELECT 1 FROM center_users WHERE center_id = ${center}`).toHaveLength(1);
+  });
+});

@@ -47,7 +47,11 @@ export async function removeCenterUser(
     : await sql`
         DELETE FROM center_users
         WHERE center_id = ${centerId} AND email = ${email}
-          AND (SELECT count(*) FROM center_users WHERE center_id = ${centerId}) > 1
+          AND (
+            SELECT count(*) FROM (
+              SELECT id FROM center_users WHERE center_id = ${centerId} ORDER BY id FOR UPDATE
+            ) AS locked
+          ) > 1
         RETURNING id
       `;
   if (removed.length > 0) return 'removed';

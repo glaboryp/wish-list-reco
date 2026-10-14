@@ -1,6 +1,7 @@
 import sql from '../db';
 import { discardBlobs } from './blobs';
 import { END_OF_LIST } from '../admin/forms';
+import { STALE_PENDING_HOURS } from './pending-captures';
 import { sortForPublic, toWishlistItem } from '../items';
 import type { AdminItem, DBItemImage, ItemInput, ItemRow, WishlistItem } from '../../types/database';
 
@@ -309,6 +310,11 @@ export async function removeOrArchiveItem(
         SELECT 1 FROM donations
         WHERE item_id = ${itemId} AND center_id = ${centerId}
           AND NOT (source = 'manual' AND voided_at IS NOT NULL)
+      ) OR EXISTS (
+        SELECT 1 FROM pending_captures
+        WHERE item_id = ${itemId} AND center_id = ${centerId}
+          AND (status = 'needs_review'
+            OR (status = 'pending' AND created_at >= NOW() - make_interval(hours => ${STALE_PENDING_HOURS}::int)))
       ) AS yes
     ),
     cleared AS (
