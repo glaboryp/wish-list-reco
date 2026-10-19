@@ -24,23 +24,23 @@
     "@neondatabase/serverless": "^1.2.0",
     "@phosphor-icons/core": "^2.1.1",
     "@vercel/analytics": "^2",
-    "@vercel/blob": "^2.8.0",
+    "@vercel/blob": "^2.8.2",
     "@vercel/speed-insights": "^2",
-    "astro": "^7",
+    "astro": "^7.4.0",
     "firebase": "^12.19.0",
     "jose": "^6.2.12",
-    "nodemailer": "^10.1.0"
+    "nodemailer": "^10.1.6"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@astrojs/vercel": "^11",
+    "@astrojs/vercel": "^11.0.15",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.19.0",
     "@types/nodemailer": "^8.0.2",
-    "postcss": "^8.5.29",
+    "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }
