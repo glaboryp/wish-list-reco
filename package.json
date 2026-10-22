@@ -26,13 +26,13 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.2",
     "@vercel/speed-insights": "^2.0.0",
-    "astro": "^7.4.1",
-    "firebase": "^12.19.0",
+    "astro": "^7.4.2",
+    "firebase": "^13.0.0",
     "jose": "^6.2.13",
     "nodemailer": "^10.1.7"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.11",
+    "@astrojs/check": "^0.9.12",
     "@astrojs/vercel": "^11.0.16",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
