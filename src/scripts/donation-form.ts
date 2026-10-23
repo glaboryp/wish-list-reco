@@ -152,6 +152,8 @@ export function initDonationForm(options: DonationFormOptions): void {
     });
     coverFeesCheckbox.addEventListener('change', updateFeeUI);
 
+    if (amountInput.value) amountInput.dispatchEvent(new Event('input'));
+
     setVisible(loadingIndicator, true);
     loadPayPalSdk(sdkUrl)
         .then((paypal) => {
