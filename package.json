@@ -27,9 +27,9 @@
     "@vercel/blob": "^2.8.2",
     "@vercel/speed-insights": "^2.0.0",
     "astro": "^7.4.2",
-    "firebase": "^13.0.0",
+    "firebase": "^13.1.0",
     "jose": "^6.2.13",
-    "nodemailer": "^10.1.7"
+    "nodemailer": "^10.2.1"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
