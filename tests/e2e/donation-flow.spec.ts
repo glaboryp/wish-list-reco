@@ -102,3 +102,27 @@ test('Shows the anonymous donor counter', async ({ page }) => {
     await page.locator('article a[href^="/recoletos/item/"]').first().click();
     await expect(page.locator('[data-donor-count]')).toHaveText('2 personas han donado');
 });
+
+test('Validates an amount typed before the donation form script loads', async ({ page }) => {
+    await page.route('https://www.paypal.com/sdk/js*', (route) =>
+        route.fulfill({
+            contentType: 'application/javascript',
+            body: `window.paypal = {
+                FUNDING: { PAYPAL: 'paypal', CARD: 'card' },
+                Buttons: () => ({ render: () => Promise.resolve() }),
+            };`,
+        }),
+    );
+    await page.route(/\/src\/scripts\/donation-form\.ts/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await route.continue();
+    });
+
+    await page.goto('/recoletos');
+    await page.locator('article a[href^="/recoletos/item/"]').first().click();
+
+    const amountInput = page.locator('input[name="amount"]');
+    await amountInput.fill('999999');
+    await amountInput.blur();
+    await expect(page.locator('text=La cantidad no puede superar')).toBeVisible();
+});
