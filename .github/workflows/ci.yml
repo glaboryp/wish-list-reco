@@ -25,7 +25,7 @@ jobs:
           check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit
+      - run: pnpm audit --audit-level high
       - run: pnpm exec astro check
       - run: pnpm exec vitest run
       - run: pnpm run build
