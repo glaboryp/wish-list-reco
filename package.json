@@ -21,26 +21,26 @@
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
-    "@neondatabase/serverless": "^1.2.0",
+    "@neondatabase/serverless": "^1.2.1",
     "@phosphor-icons/core": "^2.1.1",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.9.0",
     "@vercel/speed-insights": "^2.1.0",
-    "astro": "^7.4.11",
-    "firebase": "^13.3.0",
-    "jose": "^6.2.17",
-    "nodemailer": "^10.5.0"
+    "astro": "^7.4.13",
+    "firebase": "^13.4.0",
+    "jose": "^6.2.18",
+    "nodemailer": "^10.6.1"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
-    "@astrojs/vercel": "^11.0.21",
-    "@playwright/test": "^1.65.0",
+    "@astrojs/vercel": "^11.0.22",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^24.19.2",
     "@types/nodemailer": "^8.0.2",
-    "postcss": "^8.5.32",
+    "postcss": "^8.5.33",
     "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
